@@ -544,7 +544,9 @@
 		printEnabled: true,   // false = lock printing entirely
 		bulkDelayMs: 500,     // pause between labels for Bulk and Print all
 		maxQuantity: 500,
-		historySize: 12
+		historySize: 12,
+		defaultTab: 'bulk',   // tab shown on load: 'quick', 'bulk' or 'date'
+		rememberTab: false    // true = reopen on the last tab you used instead of defaultTab
 	};
 
 	/*
@@ -1087,8 +1089,8 @@
 			if (n !== null) { e.preventDefault(); selectTab(tabs[n].dataset.tab, true); }
 		});
 	});
-	const savedTab = store.get('tab', 'quick');
-	selectTab(tabs.some((t) => t.dataset.tab === savedTab) ? savedTab : 'quick');
+	const startTab = CONFIG.rememberTab ? store.get('tab', CONFIG.defaultTab) : CONFIG.defaultTab;
+	selectTab(tabs.some((t) => t.dataset.tab === startTab) ? startTab : 'quick');
 
 	/* ------------------------------------------------------------------ bulk */
 
