@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Printmon 2</title>
+<title>Printmon 3</title>
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ff9900'/%3E%3Cg fill='none' stroke='%231b2430' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13V7h12v6'/%3E%3Cpath d='M10 21H8a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2'/%3E%3Crect x='10' y='18' width='12' height='7'/%3E%3C/g%3E%3C/svg%3E">
 
@@ -324,6 +324,11 @@
 	.date-row .input { flex: 1 1 180px; width: auto; }
 	.preview { margin-top: 14px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
 
+	/* Barcode generator */
+	.gen-warn { margin: 12px 0 0; }
+	.pill.ok { color: var(--success); }
+	@media (max-width: 520px) { .tab .i { display: none; } }
+
 	/* ------------------------------------------------------------------
 	   History
 	   ------------------------------------------------------------------ */
@@ -401,7 +406,7 @@
 		<div class="brand">
 			<span class="logo"><svg class="i"><use href="#i-printer"/></svg></span>
 			<div>
-				<h1>Printmon 2</h1>
+				<h1>Printmon 3</h1>
 				<span class="tag">Modified for JOT3</span>
 			</div>
 		</div>
@@ -465,9 +470,10 @@
 	<!-- ============================== Workspace ============================== -->
 	<section class="card" aria-label="Label tools">
 		<div class="tabs" role="tablist" aria-label="Label tools">
-			<button class="tab" role="tab" id="tab-quick" aria-controls="panel-quick" aria-selected="true" data-tab="quick"><svg class="i"><use href="#i-zap"/></svg>Quick print</button>
+			<button class="tab" role="tab" id="tab-quick" aria-controls="panel-quick" aria-selected="true" data-tab="quick"><svg class="i"><use href="#i-zap"/></svg>Quick Print</button>
 			<button class="tab" role="tab" id="tab-bulk" aria-controls="panel-bulk" aria-selected="false" tabindex="-1" data-tab="bulk"><svg class="i"><use href="#i-list"/></svg>Bulk</button>
 			<button class="tab" role="tab" id="tab-date" aria-controls="panel-date" aria-selected="false" tabindex="-1" data-tab="date"><svg class="i"><use href="#i-calendar"/></svg>Date</button>
+			<button class="tab" role="tab" id="tab-barcodes" aria-controls="panel-barcodes" aria-selected="false" tabindex="-1" data-tab="barcodes"><svg class="i"><use href="#i-scan"/></svg>Barcodes</button>
 		</div>
 
 		<div class="banner" id="displayBanner" hidden>
@@ -517,6 +523,27 @@
 			</div>
 			<p class="preview" id="datePreview"></p>
 		</div>
+
+		<!-- Barcode generator -->
+		<div class="panel" role="tabpanel" id="panel-barcodes" aria-labelledby="tab-barcodes" hidden>
+			<textarea id="genInput" class="input mono" placeholder="Paste text here, one barcode per line" aria-label="Text to turn into barcodes, one per line" spellcheck="false" autocapitalize="off"></textarea>
+			<div class="banner gen-warn" id="genWarn" hidden>
+				<svg class="i"><use href="#i-alert"/></svg>
+				<span id="genWarnText"></span>
+			</div>
+			<div class="bulk-bar">
+				<div class="left">
+					<span class="pill"><b id="genCount">0</b> barcodes</span>
+					<span class="pill ok" id="genStatus" hidden>Window open</span>
+				</div>
+				<div class="row">
+					<button type="button" class="btn btn-ghost" id="genClear">Clear</button>
+					<button type="button" class="btn btn-secondary" id="genToggle" hidden>Close window</button>
+					<button type="button" class="btn btn-primary" id="genGenerate"><svg class="i"><use href="#i-scan"/></svg>Generate</button>
+				</div>
+			</div>
+			<p class="note">Opens a pop-up with large on-screen barcodes you can scan. They stay black-on-white so they scan in both light and dark mode.</p>
+		</div>
 	</section>
 
 	<!-- ============================== History ============================== -->
@@ -546,7 +573,8 @@
 		maxQuantity: 500,
 		historySize: 12,
 		defaultTab: 'bulk',   // tab shown on load: 'quick', 'bulk' or 'date'
-		rememberTab: false    // true = reopen on the last tab you used instead of defaultTab
+		rememberTab: false,   // true = reopen on the last tab you used instead of defaultTab
+		barcodeMaxLength: 60  // longest text the Barcodes tab will turn into a barcode
 	};
 
 	/*
@@ -573,10 +601,13 @@
 				{
 					title: 'Dropzones',
 					items: [
-						'dz-P-IB-NoSlot',
 						'dz-P-IB-ProblemSolve',
+						'dz-S-LA-Ticket',
 						'dz-S-AndonPS',
+						'dz-P-IOL',
+						'dz-P-IB-NoSlot',
 						'dz-P-PID-01',
+						'TRASH',
 						'dz-P-IB-01',
 						'dz-P-IB-13',
 						'dz-P-IBReceiveError-01',
@@ -585,6 +616,7 @@
 						'dz-P-IBReceiveError-13',
 						'dz-P-ISS-1-A-1',
 						'dz-P-ISS-1-B-1',
+						'dz-P-ISS-Hazmat',
 						'dz-P-ReturnReturns'
 					]
 				},
@@ -598,7 +630,8 @@
 						'ws-A-R-1-06',
 						'ws-rcv-pid-1',
 						'ws-rcv-preditor',
-						'ws-rcv-carton-preditor'
+						'ws-rcv-carton-preditor',
+						'rc-PID-Receive-Line-1'
 					]
 				}
 			]
@@ -611,17 +644,23 @@
 					title: 'Dropzones',
 					items: [
 						'dz-S-Dock-OPVNA',
+						'dz-S-Jackpot',
 						'dz-S-OB-01',
 						'dz-S-OB-10',
 						'dz-S-Sort-01',
 						'dz-S-Sort-02',
 						'dz-S-Sort-03',
-						'dz-S-Sort-04'
+						'dz-S-Sort-04',
+						'dz-R-CRTransport',
+						'dz-P-OB-DAMAGES'
 					]
 				},
 				{
 					title: 'Conveyors',
-					items: ['cvM01_INDUCT']
+					items: [
+						'cvM01_INDUCT',
+						'chP1011DMG'
+					]
 				}
 			]
 		}
@@ -641,6 +680,7 @@
 
 	let empId = '';
 	let printEnabled = CONFIG.printEnabled;
+	let genWin = null;   // the Barcodes pop-up window, when open
 
 	/* ---------------------------------------------------------------- helpers */
 
@@ -712,6 +752,7 @@
 		const next = theme === 'dark' ? 'light' : 'dark';
 		$('themeToggle').setAttribute('aria-label', 'Switch to ' + next + ' mode');
 		$('themeToggle').title = 'Switch to ' + next + ' mode';
+		try { if (genWin && !genWin.closed) genWin.document.documentElement.setAttribute('data-theme', theme); } catch (e) { /* pop-up gone */ }
 	}
 	applyTheme(root.getAttribute('data-theme'));
 	$('themeToggle').addEventListener('click', () => {
@@ -1133,6 +1174,218 @@
 		print($('date').value, '', { refocus: false });
 	});
 	updateDatePreview();
+
+	/* ------------------------------------------------------------- barcodes */
+
+	// Code 128 bar/space widths for symbols 0-105 (bar first, then alternating).
+	const C128 = [
+		'212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+		'221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+		'221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+		'212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+		'231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+		'231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+		'314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+		'112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+		'111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+		'214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+		'114131', '311141', '411131', '211412', '211214', '211232'
+	];
+	const C128_STOP = '2331112';
+	const isDigit = (s, i) => i < s.length && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57;
+
+	/** Code 128 symbol values for `text`, switching between sets B and C to keep it short. */
+	function code128Symbols(text) {
+		const digitRun = (i) => { let n = 0; while (isDigit(text, i + n)) n++; return n; };
+		const out = [];
+		let mode = 'B';
+		const first = digitRun(0);
+		if ((first >= 4 && first % 2 === 0) || (first === 2 && text.length === 2)) mode = 'C';
+		out.push(mode === 'C' ? 105 : 104);
+		let i = 0;
+		while (i < text.length) {
+			if (mode === 'B') {
+				const n = digitRun(i);
+				if (n >= 6 || (n >= 4 && i + n === text.length)) {
+					if (n % 2) { out.push(text.charCodeAt(i) - 32); i++; }   // odd digit stays in set B
+					out.push(99);
+					mode = 'C';
+				} else {
+					out.push(text.charCodeAt(i) - 32);
+					i++;
+				}
+			} else if (isDigit(text, i) && isDigit(text, i + 1)) {
+				out.push(parseInt(text.substr(i, 2), 10));
+				i += 2;
+			} else {
+				out.push(100);
+				mode = 'B';
+			}
+		}
+		return out;
+	}
+
+	/** Returns { value, widths, modules } or null when the text can't be encoded. */
+	function code128(text) {
+		for (let i = 0; i < text.length; i++) {
+			const c = text.charCodeAt(i);
+			if (c < 32 || c > 126) return null;
+		}
+		const sym = code128Symbols(text);
+		let sum = sym[0];
+		for (let i = 1; i < sym.length; i++) sum += sym[i] * i;
+		sym.push(sum % 103);
+		const widths = sym.map((s) => C128[s]).join('') + C128_STOP;
+		let modules = 0;
+		for (let i = 0; i < widths.length; i++) modules += +widths[i];
+		return { value: text, widths: widths, modules: modules };
+	}
+
+	/** Turns the textarea into { items, skipped } (blank lines are ignored). */
+	function genParse() {
+		const items = [], skipped = [];
+		$('genInput').value.split(/\r?\n/).forEach((raw, idx) => {
+			const text = raw.trim();
+			if (!text) return;
+			if (text.length > CONFIG.barcodeMaxLength) { skipped.push('line ' + (idx + 1) + ' (over ' + CONFIG.barcodeMaxLength + ' characters)'); return; }
+			const enc = code128(text);
+			if (enc) items.push(enc);
+			else skipped.push('line ' + (idx + 1) + ' (unsupported characters)');
+		});
+		return { items, skipped };
+	}
+
+	/** The pop-up's whole document: big, centred, black-on-white barcodes that work in either theme. */
+	function genDocument(items, theme) {
+		const data = JSON.stringify(items).replace(/</g, '\\u003c');
+		return '<!DOCTYPE html><html lang="en" data-theme="' + theme + '"><head><meta charset="UTF-8">' +
+		'<meta name="viewport" content="width=device-width, initial-scale=1"><title>Barcodes</title>' +
+		'<style>' +
+		':root{--bg:#f5f6f8;--text:#141b26;--muted:#646f80;--bar:#ffffff;--line:#e2e5ea;--accent:#ff9900;color-scheme:light}' +
+		':root[data-theme="dark"]{--bg:#0d1219;--text:#e8ecf2;--muted:#8b97aa;--bar:#151b24;--line:#263040;color-scheme:dark}' +
+		'*{box-sizing:border-box}' +
+		'body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}' +
+		'header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 24px;background:var(--bar);border-bottom:1px solid var(--line)}' +
+		'header h1{margin:0;font-size:16px;font-weight:700}header h1 span{margin-left:8px;color:var(--muted);font-weight:500;font-size:13px}' +
+		'.tools{display:flex;gap:8px}' +
+		'button{height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--text);font:inherit;font-weight:600;cursor:pointer}' +
+		'button:hover{border-color:var(--muted)}button.primary{background:var(--accent);border-color:var(--accent);color:#1b2430}' +
+		'main{display:flex;flex-direction:column;align-items:center;gap:64px;padding:40px 24px 96px}' +
+		'.card{position:relative;background:#fff;color:#000;border-radius:18px;border:1px solid var(--line);padding:30px 28px 26px;box-shadow:0 6px 24px rgba(0,0,0,.18)}' +
+		'.idx{position:absolute;top:12px;left:18px;font-size:12px;color:#6b7280;font-variant-numeric:tabular-nums}' +
+		'.label{margin:0 0 16px;text-align:center;font:700 32px/1.15 ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;letter-spacing:.02em;white-space:nowrap;overflow:hidden;color:#000}' +
+		'.bars{display:flex;justify-content:center}.bars svg{display:block;background:#fff}' +
+		'.warn{display:none;margin-top:12px;text-align:center;font-size:13px;font-weight:600;color:#b42318}' +
+		'</style></head><body>' +
+		'<header><h1>Barcodes<span id="count"></span></h1><div class="tools">' +
+		'<button id="smaller" title="Smaller" aria-label="Smaller">A−</button>' +
+		'<button id="larger" title="Larger" aria-label="Larger">A+</button>' +
+		'<button id="theme">Theme</button>' +
+		'<button id="close" class="primary">Close</button></div></header>' +
+		'<main id="list"></main>' +
+		'<script>' +
+		'var ITEMS=' + data + ',QUIET=10,PAD=28,scale=1,SVGNS="http://www.w3.org/2000/svg";' +
+		'var list=document.getElementById("list"),cards=[];' +
+		'document.getElementById("count").textContent=ITEMS.length+(ITEMS.length===1?" barcode":" barcodes");' +
+		'ITEMS.forEach(function(it,n){' +
+		'var card=document.createElement("article");card.className="card";' +
+		'var idx=document.createElement("div");idx.className="idx";idx.textContent=(n+1)+" / "+ITEMS.length;' +
+		'var label=document.createElement("h2");label.className="label";label.textContent=it.value;' +
+		'var bars=document.createElement("div");bars.className="bars";' +
+		'var W=it.modules+QUIET*2,x=QUIET,d="";' +
+		'for(var i=0;i<it.widths.length;i++){var w=+it.widths[i];if(i%2===0)d+="M"+x+" 0h"+w+"v100h-"+w+"z";x+=w}' +
+		'var svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("viewBox","0 0 "+W+" 100");' +
+		'svg.setAttribute("preserveAspectRatio","none");svg.setAttribute("shape-rendering","crispEdges");' +
+		'svg.setAttribute("role","img");svg.setAttribute("aria-label","Barcode "+it.value);' +
+		'var bg=document.createElementNS(SVGNS,"rect");bg.setAttribute("width",W);bg.setAttribute("height",100);bg.setAttribute("fill","#fff");' +
+		'var path=document.createElementNS(SVGNS,"path");path.setAttribute("d",d);path.setAttribute("fill","#000");' +
+		'svg.appendChild(bg);svg.appendChild(path);bars.appendChild(svg);' +
+		'var warn=document.createElement("div");warn.className="warn";warn.textContent="Window too narrow to scan this barcode. Make the window wider.";' +
+		'card.appendChild(idx);card.appendChild(label);card.appendChild(bars);card.appendChild(warn);list.appendChild(card);' +
+		'cards.push({card:card,label:label,svg:svg,warn:warn,W:W,len:it.value.length})});' +
+		'function layout(){' +
+		'var dpr=window.devicePixelRatio||1,avail=document.documentElement.clientWidth-48-PAD*2,h=Math.round(150*scale),widest=0;' +
+		'cards.forEach(function(c){var m=Math.min(avail/c.W,4*scale),s=Math.floor(m*dpr)/dpr;if(s>=1/dpr)m=s;c.m=m;widest=Math.max(widest,c.W*m)});' +
+		'cards.forEach(function(c){c.svg.setAttribute("width",c.W*c.m);c.svg.setAttribute("height",h);c.warn.style.display=c.m*dpr<.999?"block":"none";' +
+		'c.card.style.width=Math.round(widest+PAD*2)+"px";' +
+		'c.label.style.fontSize=Math.max(16,Math.min(34*Math.max(scale,.8),widest/(c.len*.62)))+"px";' +
+		'c.label.style.height=c.label.style.lineHeight=Math.round(44*Math.max(scale,.8))+"px"})}' +
+		'function zoom(f){scale=Math.max(.6,Math.min(1.8,scale+f));layout()}' +
+		'document.getElementById("smaller").onclick=function(){zoom(-.15)};' +
+		'document.getElementById("larger").onclick=function(){zoom(.15)};' +
+		'document.getElementById("theme").onclick=function(){var r=document.documentElement;r.setAttribute("data-theme",r.getAttribute("data-theme")==="dark"?"light":"dark")};' +
+		'document.getElementById("close").onclick=function(){window.close()};' +
+		'document.addEventListener("keydown",function(e){if(e.key==="Escape")window.close()});' +
+		'window.addEventListener("resize",layout);layout();' +
+		'<\/script></body></html>';
+	}
+
+	let genItems = [];
+	const genOpen = () => !!(genWin && !genWin.closed);
+
+	function genSync() {
+		if (!genOpen()) genWin = null;
+		$('genToggle').hidden = !genItems.length;
+		$('genToggle').textContent = genOpen() ? 'Close window' : 'Reopen window';
+		$('genStatus').hidden = !genOpen();
+	}
+
+	function genOpenWindow() {
+		if (!genItems.length) return;
+		let w = genOpen() ? genWin : null;
+		if (!w) {
+			const width = Math.min(1200, screen.availWidth - 80), height = Math.min(900, screen.availHeight - 80);
+			const left = Math.max(0, Math.round((screen.availWidth - width) / 2));
+			const top = Math.max(0, Math.round((screen.availHeight - height) / 2));
+			w = window.open('', 'pm-barcodes', 'popup=yes,width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+		}
+		if (!w) { toast('Pop-up blocked. Allow pop-ups for this page and try again.', 'error'); return; }
+		w.document.open();
+		w.document.write(genDocument(genItems, root.getAttribute('data-theme')));
+		w.document.close();
+		w.focus();
+		genWin = w;
+		genSync();
+	}
+
+	function genCount() { $('genCount').textContent = genParse().items.length; }
+
+	$('genInput').value = store.get('genText', '');
+	$('genInput').addEventListener('input', () => {
+		store.set('genText', $('genInput').value);
+		$('genWarn').hidden = true;
+		genCount();
+	});
+	$('genInput').addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('genGenerate').click(); }
+	});
+
+	$('genGenerate').addEventListener('click', () => {
+		const parsed = genParse();
+		$('genWarn').hidden = !parsed.skipped.length;
+		if (parsed.skipped.length) $('genWarnText').textContent = 'Skipped ' + parsed.skipped.join(', ') + '.';
+		if (!parsed.items.length) { toast('Add some text first', 'warn'); $('genInput').focus(); return; }
+		genItems = parsed.items;
+		genOpenWindow();
+	});
+
+	$('genToggle').addEventListener('click', () => {
+		if (genOpen()) { genWin.close(); genWin = null; genSync(); }
+		else genOpenWindow();
+	});
+
+	$('genClear').addEventListener('click', () => {
+		$('genInput').value = '';
+		store.set('genText', '');
+		$('genWarn').hidden = true;
+		genCount();
+		$('genInput').focus();
+	});
+
+	setInterval(genSync, 500);
+	window.addEventListener('beforeunload', () => { if (genOpen()) genWin.close(); });
+	genCount();
+	genSync();
 
 	/* ----------------------------------------------------- badge / lock screen */
 
