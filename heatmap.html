@@ -376,15 +376,8 @@
 
 			<div class="controls">
 				<div class="ctl">
-					<div class="ctl-top"><span class="label">Rows</span></div>
-					<div class="seg" role="group" aria-label="Rows" id="rowsSeg">
-						<button type="button" data-v="all">All bins</button>
-						<button type="button" data-v="data">Bins in file</button>
-					</div>
-				</div>
-				<div class="ctl">
 					<div class="ctl-top"><label class="label" for="rh">Row height</label><span class="hint" id="rhVal"></span></div>
-					<input type="range" id="rh" min="2" max="24" step="1">
+					<input type="range" id="rh" min="10" max="40" step="1">
 				</div>
 				<div class="ctl" id="combineCtl" hidden>
 					<div class="ctl-top"><span class="label">Several rows per bin</span></div>
@@ -463,8 +456,12 @@
 		{ name: 'paVNA01', from: 403, to: 400, color: '#a8a8a8' },
 	];
 	const AISLES = LAYOUT.filter((x) => typeof x === 'number');
-	const BIN_TOP = 365;
+	// Bins are read in tens: 360, 350, … 100. Bins in between (e.g. 135) are ignored.
+	const BIN_TOP = 360;
 	const BIN_BOTTOM = 100;
+	const BIN_STEP = 10;
+	const ROWS = [];
+	for (let b = BIN_TOP; b >= BIN_BOTTOM; b -= BIN_STEP) ROWS.push(b);
 
 	/* ----------------------------------------------------------------- color */
 
@@ -599,7 +596,9 @@
 
 	/* ----------------------------------------------------------------- state */
 
-	const settings = Object.assign({ rows: 'all', rh: 3, combine: 'avg', level: 'all' }, store.get('settings', {}));
+	const settings = Object.assign({ rh: 24, combine: 'avg', level: 'all' }, store.get('settings', {}));
+	delete settings.rows;
+	if (!(settings.rh >= 10 && settings.rh <= 40)) settings.rh = 24; // older saves used thin 1-bin rows
 	let data = store.get('data', null); // { name, records: [[bay, pct], ...], skipped, fractions }
 
 	function saveSettings() { store.set('settings', settings); }
@@ -610,11 +609,13 @@
 		const entries = [];
 		const levels = new Set();
 		const outside = new Map();
+		let offGrid = 0;
 		if (data) {
 			for (const [bay, pct] of data.records) {
 				const p = parseBay(bay);
 				if (!p) continue;
 				if (!AISLES.includes(p.aisle)) { outside.set(p.aisle, (outside.get(p.aisle) || 0) + 1); continue; }
+				if (p.bin % BIN_STEP || p.bin > BIN_TOP || p.bin < BIN_BOTTOM) { offGrid++; continue; }
 				levels.add(p.level);
 				entries.push({ bay, pct, aisle: p.aisle, bin: p.bin, level: p.level });
 			}
@@ -636,18 +637,6 @@
 				: c.items.reduce((s, x) => s + x.pct, 0) / c.items.length;
 		}
 
-		// Rows top → bottom: 365 down to 100, stretched if the file has bins outside that range.
-		let rows;
-		const binsInData = [...new Set([...cells.values()].map((c) => c.bin))].sort((a, b) => b - a);
-		if (settings.rows === 'data' && binsInData.length) {
-			rows = binsInData;
-		} else {
-			const top = Math.max(BIN_TOP, binsInData[0] || BIN_TOP);
-			const bottom = Math.min(BIN_BOTTOM, binsInData[binsInData.length - 1] || BIN_BOTTOM);
-			rows = [];
-			for (let b = top; b >= bottom; b--) rows.push(b);
-		}
-
 		const perAisle = new Map();
 		for (const c of cells.values()) {
 			const a = perAisle.get(c.aisle) || { sum: 0, n: 0 };
@@ -655,7 +644,7 @@
 			perAisle.set(c.aisle, a);
 		}
 
-		return { entries, cells, rows, levels: [...levels].sort(), multi, outside, perAisle };
+		return { entries, cells, rows: ROWS, levels: [...levels].sort(), multi, outside, offGrid, perAisle };
 	}
 
 	/* ---------------------------------------------------------------- render */
@@ -714,7 +703,7 @@
 				const c = cells.get(x + '|' + rows[r]);
 				if (!c) { body += '<div class="cell" data-a="' + x + '" data-r="' + r + '"></div>'; continue; }
 				body += '<div class="cell" data-a="' + x + '" data-r="' + r + '" style="background:' + color(c.value) +
-					(showText ? ';color:' + inkFor(c.value) + ';font-size:' + Math.min(11, rh - 4) + 'px' : '') + '">' +
+					(showText ? ';color:' + inkFor(c.value) + ';font-size:' + Math.min(12, rh - 4) + 'px' : '') + '">' +
 					(showText ? Math.round(c.value) : '') + '</div>';
 			}
 			html += '<div class="aisle-col" style="' + at(col, 5) + '">' + body + '</div>';
@@ -739,9 +728,6 @@
 		const marks = [];
 		rows.forEach((b, i) => {
 			const y = i * rh + rh / 2;
-			const edge = i === 0 || i === rows.length - 1;
-			const step = rows.length > 60 ? 25 : 5;
-			if (!edge && b % step !== 0 && rows.length > 30) return;
 			if (marks.length && y - marks[marks.length - 1].y < minGap) {
 				if (i === rows.length - 1) marks.pop(); else return;
 			}
@@ -751,9 +737,7 @@
 	}
 
 	function renderControls() {
-		for (const [seg, key] of [['rowsSeg', 'rows'], ['combineSeg', 'combine']]) {
-			for (const b of $(seg).children) b.setAttribute('aria-pressed', String(b.dataset.v === settings[key]));
-		}
+		for (const b of $('combineSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === settings.combine));
 		$('rh').value = settings.rh;
 		$('rhVal').textContent = settings.rh + ' px';
 		$('combineCtl').hidden = !view.multi && settings.combine === 'avg';
@@ -796,6 +780,7 @@
 		const notes = [];
 		if (data && data.fractions) notes.push('Utilization values looked like fractions (e.g. 0.85), so they were read as <b>percentages × 100</b>.');
 		if (data && data.skipped) notes.push('<b>' + data.skipped.toLocaleString() + '</b> row' + (data.skipped === 1 ? '' : 's') + ' skipped (no readable Bay or % Utilization).');
+		if (view.offGrid) notes.push('<b>' + view.offGrid.toLocaleString() + '</b> row' + (view.offGrid === 1 ? '' : 's') + ' ignored because the bin is not one of the tens from ' + BIN_TOP + ' to ' + BIN_BOTTOM + ' (e.g. 135).');
 		if (view.outside.size) {
 			const total = [...view.outside.values()].reduce((s, v) => s + v, 0);
 			const list = [...view.outside.keys()].sort((a, b) => a - b);
@@ -923,10 +908,10 @@
 		AISLES.forEach((a, ai) => {
 			const base = 25 + ((ai * 37) % 60);
 			const phase = Math.random() * Math.PI * 2;
-			for (let b = BIN_TOP; b >= BIN_BOTTOM; b--) {
-				let v = base + 35 * Math.sin(b / 18 + phase) + (Math.random() - 0.5) * 18;
-				if (Math.random() < 0.015) v = 110 + Math.random() * 70;
-				if (Math.random() < 0.03) v = 0;
+			for (const b of ROWS) {
+				let v = base + 35 * Math.sin(b / 40 + phase) + (Math.random() - 0.5) * 24;
+				if (Math.random() < 0.04) v = 110 + Math.random() * 70;
+				if (Math.random() < 0.04) v = 0;
 				lines.push('BAY-P-1-C' + a + 'A' + b + ',' + Math.max(0, v).toFixed(1) + '%');
 			}
 		});
@@ -945,7 +930,6 @@
 			render();
 		});
 	}
-	bindSeg('rowsSeg', 'rows');
 	bindSeg('combineSeg', 'combine');
 
 	$('level').addEventListener('change', (e) => {
