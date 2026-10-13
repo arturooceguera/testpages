@@ -214,7 +214,6 @@
 	.ramp-ticks span { position: absolute; top: 2px; transform: translateX(-50%); }
 	.ramp-ticks span:first-child { transform: none; }
 	.ramp-ticks span:last-child { transform: translateX(-100%); }
-	@media (max-width: 600px) { .ramp-ticks .mid { display: none; } }
 	.key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 	.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .12); }
 
@@ -466,14 +465,14 @@
 
 	// 0% dark green → light green → green-yellow → yellow → orange → light red → dark red at the
 	// highest utilization in the file (scaleMax), so the colors always span the file's own range.
-	// Positions are % of scaleMax: yellow sits at 90%, leaving the top 10% for orange → dark red.
+	// Positions are % of scaleMax: yellow sits at 78%, leaving the top 22% for orange → dark red.
 	const STOPS = [
 		[0, '#0a5a1f'],
-		[30, '#5cbf4a'],
-		[60, '#b5dc3c'],
-		[90, '#ffe03a'],
-		[93.33, '#ffa12b'],
-		[96.67, '#f2564a'],
+		[26, '#5cbf4a'],
+		[52, '#b5dc3c'],
+		[78, '#ffe03a'],
+		[85.33, '#ffa12b'],
+		[92.67, '#f2564a'],
 		[100, '#8b0a0a'],
 	];
 	let scaleMax = 100;
@@ -737,10 +736,7 @@
 	}
 
 	function renderControls() {
-		$('rampTicks').innerHTML = [0, 30, 60, 90, 100].map((f) => {
-			const v = scaleMax * f / 100;
-			return '<span' + (f === 90 ? ' class="mid"' : '') + ' style="left:' + f + '%">' + Math.round(v) + '%</span>';
-		}).join('');
+		$('rampTicks').innerHTML = [0, 26, 52, 78, 100].map((f) => '<span style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
 		$('scaleHint').textContent = data && view.entries.length ? '0% to ' + fmt(scaleMax) + ' (highest in file)' : 'Red = highest % in your file';
 
 		for (const b of $('combineSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === settings.combine));
