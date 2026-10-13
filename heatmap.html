@@ -214,6 +214,11 @@
 	.ramp-ticks span { position: absolute; top: 2px; transform: translateX(-50%); }
 	.ramp-ticks span:first-child { transform: none; }
 	.ramp-ticks span:last-child { transform: translateX(-100%); }
+	.ramp-ticks span::before { content: ""; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px; background: currentColor; }
+	.ramp-ticks span:first-child::before { left: 0; }
+	.ramp-ticks span:last-child::before { left: auto; right: 0; }
+	@media (max-width: 600px) { .ramp-ticks .minor { font-size: 0; } }
+	@media (max-width: 440px) { .ramp-ticks .narrow { font-size: 0; } }
 	.key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 	.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .12); }
 
@@ -463,17 +468,19 @@
 
 	/* ----------------------------------------------------------------- color */
 
-	// 0% dark green → light green → green-yellow → yellow → orange → light red → dark red at the
+	// 0% dark green → light green → green-yellow → yellow → orange → orange-red → red → dark red at the
 	// highest utilization in the file (scaleMax), so the colors always span the file's own range.
-	// Positions are % of scaleMax: yellow sits at 78%, leaving the top 22% for orange → dark red.
+	// Positions are % of scaleMax: yellow sits at 70%, leaving the top 30% for orange → dark red.
+	// Each stop is also a tick on the legend; "minor" (and on phones "narrow") ticks drop their label on small screens.
 	const STOPS = [
-		[0, '#0a5a1f'],
-		[26, '#5cbf4a'],
-		[52, '#b5dc3c'],
-		[78, '#ffe03a'],
-		[85.33, '#ffa12b'],
-		[92.67, '#f2564a'],
-		[100, '#8b0a0a'],
+		[0, '#0a5a1f', 'Dark green'],
+		[70 / 3, '#5cbf4a', 'Light green'],
+		[140 / 3, '#b5dc3c', 'Green-yellow'],
+		[70, '#ffe03a', 'Yellow'],
+		[77.5, '#ffa12b', 'Orange', 'minor'],
+		[85, '#ff5a1f', 'Orange-red', 'narrow'],
+		[92.5, '#e01e1e', 'Red', 'minor'],
+		[100, '#8b0a0a', 'Dark red'],
 	];
 	let scaleMax = 100;
 
@@ -736,7 +743,8 @@
 	}
 
 	function renderControls() {
-		$('rampTicks').innerHTML = [0, 26, 52, 78, 100].map((f) => '<span style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
+		$('rampTicks').innerHTML = STOPS.map(([f, , name, minor]) =>
+			'<span' + (minor ? ' class="' + minor + '"' : '') + ' title="' + name + '" style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
 		$('scaleHint').textContent = data && view.entries.length ? '0% to ' + fmt(scaleMax) + ' (highest in file)' : 'Red = highest % in your file';
 
 		for (const b of $('combineSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === settings.combine));
