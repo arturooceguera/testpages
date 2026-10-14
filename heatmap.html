@@ -318,6 +318,31 @@
 	.toast.out { opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; }
 	@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 
+	/* ------------------------------------------------------------------
+	   Print: the floor map only, one landscape page that fits A4 and Letter
+	   ------------------------------------------------------------------ */
+	.print-head { display: none; }
+	@media print {
+		@page { size: landscape; margin: 10mm; }
+		* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+		html, body { background: #fff !important; min-height: 0; }
+		.topbar, #tip, #toasts, main > :not(#mapCard), #mapCard > .card-head { display: none !important; }
+		main { display: block; padding: 0; }
+		.wrap { max-width: none; padding: 0; }
+		#mapCard { border: 0; box-shadow: none; padding: 0; background: none; }
+		.map-scroll { overflow: visible; margin: 0; padding: 0; }
+		.floor { zoom: var(--print-zoom, 1); margin: 0 auto; break-inside: avoid; }
+		.cell.hot { outline: none; }
+		.print-head {
+			display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+			height: 40px; margin-bottom: 8px; font-size: 11px; color: var(--muted);
+		}
+		.print-head h2 { font-size: 16px; color: var(--text); }
+		.print-head .ramp { flex: 0 1 520px; min-width: 0; }
+		.print-head .ramp-ticks .minor { font-size: 0; }
+		.print-head .ramp-bar { height: 10px; }
+	}
+
 	@media (max-width: 560px) {
 		.tag { display: none; }
 		#uploadTop span { display: none; }
@@ -334,6 +359,7 @@
 	<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
 	<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
 	<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+	<symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
 	<symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
 </svg>
 
@@ -415,8 +441,18 @@
 	<p class="notice" id="notice" hidden></p>
 
 	<!-- ============================== Map ============================== -->
-	<section class="card" aria-labelledby="mapTitle">
-		<div class="card-head"><h2 id="mapTitle">Floor map</h2><span class="sub" id="mapSub">Hover a bin for details</span></div>
+	<section class="card" id="mapCard" aria-labelledby="mapTitle">
+		<div class="card-head">
+			<h2 id="mapTitle">Floor map</h2>
+			<div class="top-actions">
+				<span class="sub" id="mapSub">Hover a bin for details</span>
+				<button type="button" class="btn btn-secondary btn-sm" id="printBtn" title="Print the floor map on one page"><svg class="i"><use href="#i-printer"/></svg>Print map</button>
+			</div>
+		</div>
+		<div class="print-head" id="printHead">
+			<div><h2>Aisle Heat Map</h2><div id="printMeta"></div></div>
+			<div class="ramp" id="printRamp"></div>
+		</div>
 		<div class="map-scroll">
 			<div class="floor" id="floor"></div>
 		</div>
@@ -951,6 +987,52 @@
 		$('rhVal').textContent = settings.rh + ' px';
 		clearTimeout(rhTimer);
 		rhTimer = setTimeout(() => { saveSettings(); render(); }, 30);
+	});
+
+	/* ----------------------------------------------------------------- print */
+
+	// Printable area shared by A4 and US Letter in landscape with 10 mm margins, in CSS px
+	// (A4 is the shorter page, Letter the narrower one), less room for the header.
+	const MM = 96 / 25.4;
+	const PRINT_W = (279.4 - 20) * MM;
+	const PRINT_H = (210 - 20) * MM - 48;
+	const PRINT_DESIGN_W = 1240; // width the map is laid out at before it is scaled onto the page
+	let printing = null;
+
+	function preparePrint() {
+		if (printing) return;
+		printing = { rh: settings.rh, theme: root.getAttribute('data-theme') };
+		hideTip();
+		root.setAttribute('data-theme', 'light');
+
+		$('printMeta').textContent = (data ? data.name + ' · ' : '') + 'Printed ' + new Date().toLocaleString();
+		$('printRamp').innerHTML = document.querySelector('.legend .ramp').innerHTML;
+
+		// Lay the map out at a fixed width, pick the row height that fills the page, then scale to fit.
+		floor.style.width = PRINT_DESIGN_W + 'px';
+		const fitW = PRINT_W / PRINT_DESIGN_W;
+		const fixed = floor.offsetHeight - view.rows.length * settings.rh;
+		settings.rh = Math.max(10, Math.min(40, Math.floor((PRINT_H / fitW - fixed) / view.rows.length)));
+		render();
+		const zoom = Math.min(fitW, PRINT_H / floor.offsetHeight) * 0.98;
+		floor.style.setProperty('--print-zoom', zoom.toFixed(4));
+	}
+
+	function finishPrint() {
+		if (!printing) return;
+		settings.rh = printing.rh;
+		root.setAttribute('data-theme', printing.theme);
+		printing = null;
+		floor.style.width = '';
+		floor.style.removeProperty('--print-zoom');
+		render();
+	}
+
+	window.addEventListener('beforeprint', preparePrint);
+	window.addEventListener('afterprint', finishPrint);
+	$('printBtn').addEventListener('click', () => {
+		preparePrint();
+		window.print();
 	});
 
 	/* ----------------------------------------------------------------- theme */
