@@ -12,7 +12,7 @@
 	(function () {
 		var t = null;
 		try { t = JSON.parse(localStorage.getItem('pm2:theme')); } catch (e) {}
-		if (t !== 'light' && t !== 'dark') {
+		if (t !== 'light' && t !== 'dark' && t !== 'rosey') {
 			t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 		}
 		document.documentElement.setAttribute('data-theme', t);
@@ -70,6 +70,30 @@
 		color-scheme: dark;
 	}
 
+	/* Rosey Mode: a soft pink page with deep plum text and a rose accent. */
+	:root[data-theme="rosey"] {
+		--bg: #f7dcec;
+		--surface: #fff6fa;
+		--surface-2: #f3cfe3;
+		--field: #fffbfd;
+		--border: #e6b9d2;
+		--border-strong: #cf8bb1;
+		--text: #3a1530;
+		--muted: #7b4a6a;
+		--accent: #c2185b;
+		--accent-hover: #a8134f;
+		--accent-ink: #ffffff;
+		--accent-soft: rgba(194, 24, 91, .1);
+		--ring: rgba(194, 24, 91, .35);
+		--success: #17794a;
+		--danger: #b42318;
+		--toast-bg: #3a1530;
+		--toast-text: #fff1f8;
+		--shadow: 0 1px 2px rgba(122, 30, 80, .08), 0 1px 3px rgba(122, 30, 80, .06);
+		--shadow-pop: 0 10px 30px rgba(122, 30, 80, .28);
+		color-scheme: light;
+	}
+
 	/* ------------------------------------------------------------------
 	   Base
 	   ------------------------------------------------------------------ */
@@ -125,9 +149,11 @@
 	.icon-btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
 	.icon-btn:active { transform: scale(.95); }
 	.icon-btn .i { width: 19px; height: 19px; }
-	.icon-btn .when-dark { display: none; }
-	:root[data-theme="dark"] .icon-btn .when-dark { display: block; }
-	:root[data-theme="dark"] .icon-btn .when-light { display: none; }
+	/* The button shows the theme a click will switch to: light -> moon, dark -> rose, rosey -> sun. */
+	.icon-btn .i { display: none; }
+	:root[data-theme="light"] .icon-btn .to-dark,
+	:root[data-theme="dark"] .icon-btn .to-rosey,
+	:root[data-theme="rosey"] .icon-btn .to-light { display: block; }
 
 	/* ------------------------------------------------------------------
 	   Layout
@@ -169,7 +195,7 @@
 		background: var(--field); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
 		transition: border-color .15s, box-shadow .15s;
 	}
-	.input::placeholder { color: var(--muted); opacity: .75; }
+	.input::placeholder { color: var(--muted); opacity: 1; }
 	.input:hover { border-color: color-mix(in srgb, var(--border-strong) 70%, var(--muted)); }
 	.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 	.input.mono, textarea.mono { font-family: var(--mono); }
@@ -195,7 +221,7 @@
 	.btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 	.btn-sm { height: 34px; padding: 0 12px; font-size: 13px; }
 	.btn-block { width: 100%; }
-	.btn.armed { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+	.btn.armed, .btn.armed:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); animation: pulse 1s ease-in-out infinite; }
 	@keyframes pulse { 50% { box-shadow: 0 0 0 4px var(--ring); } }
 
 	.row { display: flex; gap: 10px; }
@@ -359,7 +385,7 @@
 		animation: toast-in .22s cubic-bezier(.2, .8, .3, 1);
 	}
 	.toast .i { color: #4cc38a; }
-	:root[data-theme="dark"] .toast .i { color: var(--success); }
+	:root[data-theme="dark"] .toast .i { color: #17794a; }
 	.toast.warn .i, .toast.error .i { color: #ff9a8f; }
 	:root[data-theme="dark"] .toast.warn .i, :root[data-theme="dark"] .toast.error .i { color: #c4372a; }
 	.toast code { font-family: var(--mono); font-size: 13px; opacity: .85; }
@@ -385,6 +411,7 @@
 	<symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
 	<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
 	<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+	<symbol id="i-rose" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="6.5"/><path d="M10.8 8.5a1.2 1.2 0 0 1 2.4 0 2.4 2.4 0 0 1-4.8 0 3.6 3.6 0 0 1 7.2 0"/><path d="M12 15v7"/><path d="M12 20c0-2.2 1.5-3.4 4-3.4 0 2.2-1.5 3.4-4 3.4Z"/></symbol>
 	<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
 	<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
 	<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -411,8 +438,9 @@
 			</div>
 		</div>
 		<button type="button" class="icon-btn" id="themeToggle" aria-label="Switch to dark mode" title="Switch theme">
-			<svg class="i when-light"><use href="#i-moon"/></svg>
-			<svg class="i when-dark"><use href="#i-sun"/></svg>
+			<svg class="i to-dark"><use href="#i-moon"/></svg>
+			<svg class="i to-rosey"><use href="#i-rose"/></svg>
+			<svg class="i to-light"><use href="#i-sun"/></svg>
 		</button>
 	</div>
 </header>
@@ -747,16 +775,24 @@
 	/* ------------------------------------------------------------------ theme */
 
 	const root = document.documentElement;
+	// The toggle cycles through these in order. Add a theme here and in the CSS to extend it.
+	const THEMES = [
+		{ id: 'light', name: 'Light Mode' },
+		{ id: 'dark', name: 'Dark Mode' },
+		{ id: 'rosey', name: 'Rosey Mode' }
+	];
+	const nextTheme = (id) => THEMES[(THEMES.findIndex((t) => t.id === id) + 1) % THEMES.length];
+
 	function applyTheme(theme) {
 		root.setAttribute('data-theme', theme);
-		const next = theme === 'dark' ? 'light' : 'dark';
-		$('themeToggle').setAttribute('aria-label', 'Switch to ' + next + ' mode');
-		$('themeToggle').title = 'Switch to ' + next + ' mode';
+		const label = 'Switch to ' + nextTheme(theme).name;
+		$('themeToggle').setAttribute('aria-label', label);
+		$('themeToggle').title = label;
 		try { if (genWin && !genWin.closed) genWin.document.documentElement.setAttribute('data-theme', theme); } catch (e) { /* pop-up gone */ }
 	}
 	applyTheme(root.getAttribute('data-theme'));
 	$('themeToggle').addEventListener('click', () => {
-		const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+		const next = nextTheme(root.getAttribute('data-theme')).id;
 		store.set('theme', next);
 		applyTheme(next);
 	});
@@ -1261,15 +1297,16 @@
 		return '<!DOCTYPE html><html lang="en" data-theme="' + theme + '"><head><meta charset="UTF-8">' +
 		'<meta name="viewport" content="width=device-width, initial-scale=1"><title>Barcodes</title>' +
 		'<style>' +
-		':root{--bg:#f5f6f8;--text:#141b26;--muted:#646f80;--bar:#ffffff;--line:#e2e5ea;--accent:#ff9900;color-scheme:light}' +
+		':root{--bg:#f5f6f8;--text:#141b26;--muted:#646f80;--bar:#ffffff;--line:#e2e5ea;--accent:#ff9900;--ink:#1b2430;color-scheme:light}' +
 		':root[data-theme="dark"]{--bg:#0d1219;--text:#e8ecf2;--muted:#8b97aa;--bar:#151b24;--line:#263040;color-scheme:dark}' +
+		':root[data-theme="rosey"]{--bg:#f7dcec;--text:#3a1530;--muted:#7b4a6a;--bar:#fff6fa;--line:#e6b9d2;--accent:#c2185b;--ink:#ffffff}' +
 		'*{box-sizing:border-box}' +
 		'body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}' +
 		'header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 24px;background:var(--bar);border-bottom:1px solid var(--line)}' +
 		'header h1{margin:0;font-size:16px;font-weight:700}header h1 span{margin-left:8px;color:var(--muted);font-weight:500;font-size:13px}' +
 		'.tools{display:flex;gap:8px}' +
 		'button{height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--text);font:inherit;font-weight:600;cursor:pointer}' +
-		'button:hover{border-color:var(--muted)}button.primary{background:var(--accent);border-color:var(--accent);color:#1b2430}' +
+		'button:hover{border-color:var(--muted)}button.primary{background:var(--accent);border-color:var(--accent);color:var(--ink)}' +
 		'main{display:flex;flex-direction:column;align-items:center;gap:64px;padding:40px 24px 96px}' +
 		'.card{position:relative;background:#fff;color:#000;border-radius:18px;border:1px solid var(--line);padding:30px 28px 26px;box-shadow:0 6px 24px rgba(0,0,0,.18)}' +
 		'.idx{position:absolute;top:12px;left:18px;font-size:12px;color:#6b7280;font-variant-numeric:tabular-nums}' +
@@ -1313,7 +1350,7 @@
 		'function zoom(f){scale=Math.max(.6,Math.min(1.8,scale+f));layout()}' +
 		'document.getElementById("smaller").onclick=function(){zoom(-.15)};' +
 		'document.getElementById("larger").onclick=function(){zoom(.15)};' +
-		'document.getElementById("theme").onclick=function(){var r=document.documentElement;r.setAttribute("data-theme",r.getAttribute("data-theme")==="dark"?"light":"dark")};' +
+		'document.getElementById("theme").onclick=function(){var r=document.documentElement,o=["light","dark","rosey"],i=o.indexOf(r.getAttribute("data-theme"));r.setAttribute("data-theme",o[(i+1)%o.length])};' +
 		'document.getElementById("close").onclick=function(){window.close()};' +
 		'document.addEventListener("keydown",function(e){if(e.key==="Escape")window.close()});' +
 		'window.addEventListener("resize",layout);layout();' +
