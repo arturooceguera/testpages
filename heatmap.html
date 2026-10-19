@@ -208,20 +208,11 @@
 	/* Legend */
 	.legend { grid-column: 1 / -1; display: grid; gap: 8px; }
 	.legend-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; }
-	.ramp { flex: 1 1 280px; min-width: 220px; }
-	.ramp-bar { height: 14px; border-radius: 4px; }
-	.ramp-ticks { position: relative; height: 16px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-	.ramp-ticks span { position: absolute; top: 2px; transform: translateX(-50%); }
-	.ramp-ticks span:first-child { transform: none; }
-	.ramp-ticks span:last-child { transform: translateX(-100%); }
-	.ramp-ticks span::before { content: ""; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px; background: currentColor; }
-	.ramp-ticks span:first-child::before { left: 0; }
-	.ramp-ticks span:last-child::before { left: auto; right: 0; }
-	.ramp-bands { display: flex; margin-top: 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-	.ramp-bands span { min-width: 0; padding: 1px 6px; border-left: 1px solid var(--border-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.ramp-bands span:first-child { border-left: 0; padding-left: 0; }
-	.ramp-bands b { color: var(--text); font-weight: 600; }
-	@media (max-width: 600px) { .ramp-bands { font-size: 10px; } .ramp-bands span { padding: 1px 4px; } }
+	.legend .ctl-top { flex-wrap: wrap; gap: 2px 12px; }
+	.legend-row .key { color: var(--text); font-variant-numeric: tabular-nums; }
+	.legend-row .key small { color: var(--muted); font-size: 11px; }
+	.legend-row .key.extra { color: var(--muted); }
+	.ramp-bar { display: inline-block; width: 140px; height: 12px; border-radius: 3px; }
 	.key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 	.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .12); }
 
@@ -337,12 +328,15 @@
 		.floor { zoom: var(--print-zoom, 1); margin: 0 auto; break-inside: avoid; }
 		.cell.hot { outline: none; }
 		.print-head {
-			display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
-			height: 52px; margin-bottom: 8px; font-size: 11px; color: var(--muted);
+			display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+			height: 64px; margin-bottom: 8px; font-size: 11px; color: var(--muted);
 		}
+		.print-head > div:first-child { display: flex; align-items: baseline; gap: 12px; }
 		.print-head h2 { font-size: 16px; color: var(--text); }
-		.print-head .ramp { flex: 0 1 520px; min-width: 0; }
-		.print-head .ramp-bar { height: 10px; }
+		.print-head .legend-row { gap: 3px 12px; }
+		.print-head .key small { display: none; }
+		.print-head .key { font-size: 10px; gap: 4px; }
+		.print-head .sw { width: 10px; height: 10px; }
 	}
 
 	@media (max-width: 560px) {
@@ -426,14 +420,7 @@
 
 				<div class="legend">
 					<div class="ctl-top"><span class="label">% Utilization</span><span class="hint" id="scaleHint"></span></div>
-					<div class="legend-row">
-						<div class="ramp">
-							<div class="ramp-bar" id="rampBar"></div>
-							<div class="ramp-ticks" id="rampTicks"></div>
-							<div class="ramp-bands" id="rampBands"></div>
-						</div>
-						<span class="key"><span class="sw" style="background:var(--empty)"></span>No data</span>
-					</div>
+					<div class="legend-row" id="scaleKeys"></div>
 				</div>
 			</div>
 		</div>
@@ -454,7 +441,7 @@
 		</div>
 		<div class="print-head" id="printHead">
 			<div><h2>Aisle Heat Map</h2><div id="printMeta"></div></div>
-			<div class="ramp" id="printRamp"></div>
+			<div class="legend-row" id="printKeys"></div>
 		</div>
 		<div class="map-scroll">
 			<div class="floor" id="floor"></div>
@@ -507,8 +494,16 @@
 
 	/* ----------------------------------------------------------------- color */
 
-	// One smooth green → yellow → red gradient, relative to the highest value on the map (scaleMax):
-	// positions are % of scaleMax, so the busiest bin shown is always red.
+	// Combined scale. Bins shown on the map are ranked and split into steps that each hold about
+	// the same number of bins (so every color gets used), then adjusted so a step is never wider
+	// than STEP_MAX points (very full bins stand apart) and, where possible, never narrower than
+	// STEP_MIN points (a color change always means a real difference). If that would need more
+	// than STEP_LIMIT steps, the maximum widens just enough to fit. Steps take evenly spaced
+	// colors along a green → yellow → red gradient; empty bins (0% or less) get their own color.
+	const STEP_TARGET = 7;
+	const STEP_MIN = 3;
+	const STEP_MAX = 10;
+	const STEP_LIMIT = 12;
 	const STOPS = [
 		[0, '#1a9641'],
 		[40, '#b8dd45'],
@@ -516,15 +511,71 @@
 		[70, '#ff9f2e'],
 		[100, '#d7191c'],
 	];
-	// Fullness bands as % of scaleMax: Low up to 40%, Medium up to 70%, High above.
-	const BANDS = [['Low', 40], ['Medium', 70], ['High', 100]];
-	let scaleMax = 100;
+	const EMPTY = '#6baed6';
+	let steps = []; // [{ lo, hi, n, rgb }] lowest first
+
+	function buildSteps(values) {
+		const v = values.filter((x) => x > 0).sort((a, b) => a - b);
+		if (!v.length) return [];
+
+		// Widen the maximum (one point at a time) only if the steps would not fit in STEP_LIMIT.
+		let groups;
+		for (let maxW = Math.max(STEP_MAX, Math.ceil((v[v.length - 1] - v[0]) / STEP_LIMIT)); ; maxW++) {
+			groups = groupValues(v, maxW);
+			if (groups.length <= STEP_LIMIT) break;
+		}
+
+		return groups.map((g, i) => ({
+			lo: g[0], hi: g[g.length - 1], n: g.length,
+			rgb: gradientRgb(groups.length === 1 ? 50 : i / (groups.length - 1) * 100),
+		}));
+	}
+
+	// Sorted values → groups that are equal-count by rank, at most maxW wide, at least STEP_MIN wide where possible.
+	function groupValues(v, maxW) {
+		// 1. Equal-count groups by rank, never splitting equal values.
+		let groups = [];
+		for (let k = 1, start = 0; k <= STEP_TARGET; k++) {
+			let end = k === STEP_TARGET ? v.length : Math.round(k * v.length / STEP_TARGET);
+			while (end > 0 && end < v.length && v[end] === v[end - 1]) end++;
+			if (end > start) { groups.push(v.slice(start, end)); start = end; }
+		}
+
+		// 2. Split any group wider than the maximum into equal-width parts.
+		groups = groups.flatMap((g) => {
+			const w = g[g.length - 1] - g[0];
+			if (w <= maxW) return [g];
+			const parts = Math.ceil(w / maxW);
+			const out = Array.from({ length: parts }, () => []);
+			for (const x of g) out[Math.min(parts - 1, Math.floor((x - g[0]) / (w / parts)))].push(x);
+			return out.filter((p) => p.length);
+		});
+
+		// 3. Merge groups narrower than STEP_MIN into a neighbor, as long as the result stays within the maximum.
+		for (;;) {
+			let best = null;
+			groups.forEach((g, i) => {
+				if (g[g.length - 1] - g[0] >= STEP_MIN) return;
+				for (const j of [i - 1, i]) {
+					if (j < 0 || j + 1 >= groups.length) continue;
+					const w = groups[j + 1][groups[j + 1].length - 1] - groups[j][0];
+					if (w <= maxW && (!best || w < best.w)) best = { j, w };
+				}
+			});
+			if (!best) return groups;
+			groups.splice(best.j, 2, groups[best.j].concat(groups[best.j + 1]));
+		}
+	}
 
 	const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 	const STOPS_RGB = STOPS.map(([p, h]) => [p, hexToRgb(h)]);
 
 	function colorRgb(pct) {
-		const p = Math.min(100, Math.max(0, pct / scaleMax * 100));
+		if (pct <= 0 || !steps.length) return hexToRgb(EMPTY);
+		return (steps.find((s) => pct <= s.hi) || steps[steps.length - 1]).rgb;
+	}
+
+	function gradientRgb(p) {
 		for (let i = 1; i < STOPS_RGB.length; i++) {
 			const [p1, c1] = STOPS_RGB[i];
 			if (p <= p1) {
@@ -541,7 +592,7 @@
 		return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#141b26' : '#ffffff';
 	}
 
-	$('rampBar').style.background = 'linear-gradient(to right, ' + STOPS.map(([p, h]) => h + ' ' + p.toFixed(2) + '%').join(', ') + ')';
+	const GRADIENT = 'linear-gradient(to right, ' + STOPS.map(([p, h]) => h + ' ' + p + '%').join(', ') + ')';
 
 	/* ------------------------------------------------------------------- csv */
 
@@ -675,9 +726,8 @@
 				: c.items.reduce((s, x) => s + x.pct, 0) / c.items.length;
 		}
 
-		// Top of the color scale: the highest value currently shown on the map.
-		const top = Math.max(0, ...[...cells.values()].map((c) => c.value));
-		scaleMax = top > 0 ? top : 100;
+		// The color steps follow the values currently shown on the map.
+		steps = buildSteps([...cells.values()].map((c) => c.value));
 
 		const perAisle = new Map();
 		for (const c of cells.values()) {
@@ -779,15 +829,10 @@
 	}
 
 	function renderControls() {
-		$('rampTicks').innerHTML = [0, 40, 70, 100].map((f) => '<span style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
-		let from = 0;
-		$('rampBands').innerHTML = BANDS.map(([name, upTo], i) => {
-			const to = Math.round(scaleMax * upTo / 100);
-			const html = '<span style="flex:' + (upTo - (i ? BANDS[i - 1][1] : 0)) + '"><b>' + name + '</b> ' + from + '–' + to + '%</span>';
-			from = to + 1;
-			return html;
-		}).join('');
-		$('scaleHint').textContent = data && view.cells.size ? 'Red = ' + fmt(scaleMax) + ' (highest on the map)' : 'Red = highest % on the map';
+		$('scaleKeys').innerHTML = keysHtml();
+		$('scaleHint').textContent = steps.length
+			? steps.length + ' step' + (steps.length === 1 ? '' : 's') + ' · green = emptiest, red = fullest'
+			: 'Colors are set from the bins on the map';
 
 		for (const b of $('combineSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === settings.combine));
 		$('rh').value = settings.rh;
@@ -811,6 +856,20 @@
 			: 'Reads the <b>Bay</b> and <b>% Utilization</b> columns';
 	}
 
+	const num = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+	const range = (s) => (s.lo === s.hi ? fmt(s.lo) : num(s.lo) + '–' + fmt(s.hi));
+	const swatch = (bg) => '<span class="sw" style="background:' + bg + '"></span>';
+
+	// Legend keys, lowest step first, each with its real % range and how many bins it holds.
+	function keysHtml() {
+		const keys = steps.length
+			? steps.map((s) => '<span class="key">' + swatch('rgb(' + s.rgb.join(',') + ')') + range(s) + ' <small title="' + s.n + ' bins in this step">(' + s.n + ')</small></span>').join('')
+			: '<span class="key"><span class="ramp-bar" style="background:' + GRADIENT + '"></span>low → high</span>';
+		return keys +
+			'<span class="key extra">' + swatch(EMPTY) + 'Empty (0%)</span>' +
+			'<span class="key extra">' + swatch('var(--empty)') + 'No data</span>';
+	}
+
 	function stat(k, v, sw) {
 		return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + (sw ? '<span class="sw" style="background:' + sw + '"></span>' : '') + v + '</div></div>';
 	}
@@ -823,8 +882,8 @@
 		$('stats').innerHTML =
 			stat('Bins with data', n ? n.toLocaleString() : '—') +
 			stat('Average utilization', avg === null ? '—' : fmt(avg), avg === null ? null : color(avg)) +
-			stat('Highest utilization', n ? fmt(scaleMax) : '—', n ? color(scaleMax) : null) +
-			stat('Empty (0%)', n ? empty.toLocaleString() : '—', n ? color(0) : null);
+			stat('Highest utilization', n ? fmt(Math.max(...vals)) : '—', n ? color(Math.max(...vals)) : null) +
+			stat('Empty (0%)', n ? empty.toLocaleString() : '—', n ? EMPTY : null);
 
 		const notes = [];
 		if (data && data.fractions) notes.push('Utilization values looked like fractions (e.g. 0.85), so they were read as <b>percentages × 100</b>.');
@@ -857,6 +916,8 @@
 			html += '<div class="t-sub">No data</div>';
 		} else {
 			html += '<div class="t-val"><span class="sw" style="background:' + color(c.value) + '"></span>' + fmt(c.value) + '</div>';
+			const si = c.value > 0 ? steps.findIndex((s) => c.value <= s.hi) : -1;
+			html += '<div class="t-sub">' + (si < 0 ? 'Empty' : 'Step ' + (si + 1) + ' of ' + steps.length + ' · ' + range(steps[si])) + '</div>';
 			if (c.items.length > 1) html += '<div class="t-sub">' + (settings.combine === 'max' ? 'Highest' : 'Average') + ' of ' + c.items.length + ' rows</div>';
 			const list = c.items.slice().sort((a, b) => a.bay.localeCompare(b.bay));
 			html += '<div class="t-list">' + list.slice(0, 8).map((e) => '<span>' + esc(e.bay) + '</span><span>' + fmt(e.pct) + '</span>').join('') +
@@ -1001,7 +1062,7 @@
 	// (A4 is the shorter page, Letter the narrower one), less room for the header.
 	const MM = 96 / 25.4;
 	const PRINT_W = (279.4 - 20) * MM;
-	const PRINT_H = (210 - 20) * MM - 60;
+	const PRINT_H = (210 - 20) * MM - 72;
 	const PRINT_DESIGN_W = 1240; // width the map is laid out at before it is scaled onto the page
 	let printing = null;
 
@@ -1012,7 +1073,7 @@
 		root.setAttribute('data-theme', 'light');
 
 		$('printMeta').textContent = (data ? data.name + ' · ' : '') + 'Printed ' + new Date().toLocaleString();
-		$('printRamp').innerHTML = document.querySelector('.legend .ramp').innerHTML;
+		$('printKeys').innerHTML = keysHtml();
 
 		// Lay the map out at a fixed width, pick the row height that fills the page, then scale to fit.
 		floor.style.width = PRINT_DESIGN_W + 'px';
