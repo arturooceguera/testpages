@@ -217,8 +217,11 @@
 	.ramp-ticks span::before { content: ""; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px; background: currentColor; }
 	.ramp-ticks span:first-child::before { left: 0; }
 	.ramp-ticks span:last-child::before { left: auto; right: 0; }
-	@media (max-width: 600px) { .ramp-ticks .minor { font-size: 0; } }
-	@media (max-width: 440px) { .ramp-ticks .narrow { font-size: 0; } }
+	.ramp-bands { display: flex; margin-top: 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+	.ramp-bands span { min-width: 0; padding: 1px 6px; border-left: 1px solid var(--border-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ramp-bands span:first-child { border-left: 0; padding-left: 0; }
+	.ramp-bands b { color: var(--text); font-weight: 600; }
+	@media (max-width: 600px) { .ramp-bands { font-size: 10px; } .ramp-bands span { padding: 1px 4px; } }
 	.key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 	.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .12); }
 
@@ -335,11 +338,10 @@
 		.cell.hot { outline: none; }
 		.print-head {
 			display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
-			height: 40px; margin-bottom: 8px; font-size: 11px; color: var(--muted);
+			height: 52px; margin-bottom: 8px; font-size: 11px; color: var(--muted);
 		}
 		.print-head h2 { font-size: 16px; color: var(--text); }
 		.print-head .ramp { flex: 0 1 520px; min-width: 0; }
-		.print-head .ramp-ticks .minor { font-size: 0; }
 		.print-head .ramp-bar { height: 10px; }
 	}
 
@@ -428,6 +430,7 @@
 						<div class="ramp">
 							<div class="ramp-bar" id="rampBar"></div>
 							<div class="ramp-ticks" id="rampTicks"></div>
+							<div class="ramp-bands" id="rampBands"></div>
 						</div>
 						<span class="key"><span class="sw" style="background:var(--empty)"></span>No data</span>
 					</div>
@@ -504,20 +507,17 @@
 
 	/* ----------------------------------------------------------------- color */
 
-	// 0% dark green → light green → green-yellow → yellow → orange → orange-red → red → dark red at the
-	// highest utilization in the file (scaleMax), so the colors always span the file's own range.
-	// Positions are % of scaleMax: yellow sits at 70%, leaving the top 30% for orange → dark red.
-	// Each stop is also a tick on the legend; "minor" (and on phones "narrow") ticks drop their label on small screens.
+	// One smooth green → yellow → red gradient, relative to the highest value on the map (scaleMax):
+	// positions are % of scaleMax, so the busiest bin shown is always red.
 	const STOPS = [
-		[0, '#0a5a1f', 'Dark green'],
-		[70 / 3, '#5cbf4a', 'Light green'],
-		[140 / 3, '#b5dc3c', 'Green-yellow'],
-		[70, '#ffe03a', 'Yellow'],
-		[77.5, '#ffa12b', 'Orange', 'minor'],
-		[85, '#ff5a1f', 'Orange-red', 'narrow'],
-		[92.5, '#e01e1e', 'Red', 'minor'],
-		[100, '#8b0a0a', 'Dark red'],
+		[0, '#1a9641'],
+		[40, '#b8dd45'],
+		[55, '#ffe03a'],
+		[70, '#ff9f2e'],
+		[100, '#d7191c'],
 	];
+	// Fullness bands as % of scaleMax: Low up to 40%, Medium up to 70%, High above.
+	const BANDS = [['Low', 40], ['Medium', 70], ['High', 100]];
 	let scaleMax = 100;
 
 	const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -675,8 +675,8 @@
 				: c.items.reduce((s, x) => s + x.pct, 0) / c.items.length;
 		}
 
-		// Top of the color scale: the highest % Utilization among the rows on this map.
-		const top = entries.reduce((m, e) => Math.max(m, e.pct), 0);
+		// Top of the color scale: the highest value currently shown on the map.
+		const top = Math.max(0, ...[...cells.values()].map((c) => c.value));
 		scaleMax = top > 0 ? top : 100;
 
 		const perAisle = new Map();
@@ -779,9 +779,15 @@
 	}
 
 	function renderControls() {
-		$('rampTicks').innerHTML = STOPS.map(([f, , name, minor]) =>
-			'<span' + (minor ? ' class="' + minor + '"' : '') + ' title="' + name + '" style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
-		$('scaleHint').textContent = data && view.entries.length ? '0% to ' + fmt(scaleMax) + ' (highest in file)' : 'Red = highest % in your file';
+		$('rampTicks').innerHTML = [0, 40, 70, 100].map((f) => '<span style="left:' + f + '%">' + Math.round(scaleMax * f / 100) + '%</span>').join('');
+		let from = 0;
+		$('rampBands').innerHTML = BANDS.map(([name, upTo], i) => {
+			const to = Math.round(scaleMax * upTo / 100);
+			const html = '<span style="flex:' + (upTo - (i ? BANDS[i - 1][1] : 0)) + '"><b>' + name + '</b> ' + from + '–' + to + '%</span>';
+			from = to + 1;
+			return html;
+		}).join('');
+		$('scaleHint').textContent = data && view.cells.size ? 'Red = ' + fmt(scaleMax) + ' (highest on the map)' : 'Red = highest % on the map';
 
 		for (const b of $('combineSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === settings.combine));
 		$('rh').value = settings.rh;
@@ -995,7 +1001,7 @@
 	// (A4 is the shorter page, Letter the narrower one), less room for the header.
 	const MM = 96 / 25.4;
 	const PRINT_W = (279.4 - 20) * MM;
-	const PRINT_H = (210 - 20) * MM - 48;
+	const PRINT_H = (210 - 20) * MM - 60;
 	const PRINT_DESIGN_W = 1240; // width the map is laid out at before it is scaled onto the page
 	let printing = null;
 
