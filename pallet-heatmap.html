@@ -350,6 +350,7 @@
 	:root[data-theme="dark"] .toast .i { color: #17794a; }
 	.toast.error .i { color: #ff9a8f; }
 	:root[data-theme="dark"] .toast.error .i { color: #c4372a; }
+	.toast.info .i { color: var(--accent); }
 	.toast.out { opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; }
 	@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 
@@ -617,13 +618,13 @@
 		const box = $('toasts');
 		while (box.children.length >= 3) box.firstChild.remove();
 		const t = el('div', 'toast' + (kind ? ' ' + kind : ''));
-		t.appendChild(icon(kind === 'error' ? 'alert' : 'check'));
+		t.appendChild(icon(kind === 'error' || kind === 'info' ? 'alert' : 'check'));
 		t.appendChild(el('span', null, message));
 		box.appendChild(t);
 		setTimeout(() => {
 			t.classList.add('out');
 			setTimeout(() => t.remove(), 220);
-		}, kind === 'error' ? 4500 : 2200);
+		}, kind === 'error' || kind === 'info' ? 5000 : 2200);
 	}
 
 	/* ------------------------------------------------------------------ theme */
@@ -879,7 +880,12 @@
 		saveCache();
 		render();
 		if (opts.quiet) return;
-		if (blocked) toast('The export site needs your sign-in. Use the Update Pallet Heatmap bookmark, or drop the downloaded files here', 'error');
+		if (blocked) {
+			const usedBookmark = SOURCES.some((s) => meta[s.id].origin === 'bookmark');
+			toast(usedBookmark
+				? 'To refresh, click the Update Pallet Heatmap bookmark on the export site. After that, this button refreshes through it'
+				: 'The export site needs your sign-in. Use the Update Pallet Heatmap bookmark, or drop the downloaded files here', 'info');
+		}
 		else if (failed) toast(failed === ready.length ? 'Could not refresh the data' : 'Some data could not be refreshed', 'error');
 		else toast('Heatmap updated');
 	}
@@ -978,12 +984,11 @@
 		var w = window.open(cfg.url, 'pallet-heatmap');
 		if (!w) { alert('Pallet Heatmap: allow pop-ups for this site, then click the bookmark again.'); return; }
 		var target = cfg.origin === 'null' ? '*' : cfg.origin;
-		var acked = {};
-		window.addEventListener('message', function (e) {
-			if (e.source === w && e.data && e.data.type === 'pallet-heatmap:ack') acked[e.data.id] = true;
-		});
-		function send() {
-			if (w.closed) { clearInterval(window.__palletHeatmapTimer); return; }
+		// Kept on the window so clicking the bookmark again reuses one listener and one timer.
+		var st = window.__palletHeatmap || (window.__palletHeatmap = { acked: {} });
+		st.w = w;
+		st.send = function () {
+			if (st.w.closed) { clearInterval(st.timer); return; }
 			var id = Date.now() + '-' + Math.random(), files = {}, errors = {};
 			Promise.all(mine.map(function (k) {
 				return fetch(cfg.links[k], { credentials: 'include', cache: 'no-store' })
@@ -992,15 +997,25 @@
 			})).then(function () {
 				var tries = 0;
 				(function post() {
-					if (acked[id] || w.closed || tries++ > 60) return;
-					w.postMessage({ type: 'pallet-heatmap:data', id: id, files: files, errors: errors }, target);
+					if (st.acked[id] || st.w.closed || tries++ > 60) return;
+					st.w.postMessage({ type: 'pallet-heatmap:data', id: id, files: files, errors: errors }, target);
 					setTimeout(post, 500);
 				})();
 			});
+		};
+		if (!st.listening) {
+			st.listening = true;
+			window.addEventListener('message', function (e) {
+				var d = e.data;
+				if (!d || e.source !== st.w || (target !== '*' && e.origin !== target)) return;
+				if (d.type === 'pallet-heatmap:ack') st.acked[d.id] = true;
+				else if (d.type === 'pallet-heatmap:refresh') st.send();   // the heatmap's Refresh button
+			});
 		}
 		clearInterval(window.__palletHeatmapTimer);
-		send();
-		if (cfg.minutes > 0) window.__palletHeatmapTimer = setInterval(send, cfg.minutes * 60000);
+		clearInterval(st.timer);
+		st.send();
+		if (cfg.minutes > 0) st.timer = setInterval(st.send, cfg.minutes * 60000);
 	}
 
 	const bookmarkReady = () => SOURCES.every((s) => linkSet(s.link)) && /^https?:$/.test(location.protocol);
@@ -1052,12 +1067,40 @@
 	const trustedOrigins = new Set();
 	SOURCES.forEach((s) => { if (linkSet(s.link)) trustedOrigins.add(new URL(s.link.trim()).origin); });
 	let lastMessageId = null;
+	let exportTab = null;   // the signed-in export tab that last sent data through the bookmark
+	let askTimer = null;
+
+	/*
+	 * Refresh through the export tab: it is signed in, so it can download the files when this
+	 * page cannot. Works while the tab the bookmark was clicked in stays open.
+	 */
+	function askExportTab() {
+		const tabs = [exportTab, window.opener].filter((w, i, all) => w && !w.closed && all.indexOf(w) === i);
+		if (!tabs.length) return false;
+		tabs.forEach((w) => trustedOrigins.forEach((o) => {
+			try { w.postMessage({ type: 'pallet-heatmap:refresh' }, o); } catch (e) { /* tab went away */ }
+		}));
+		$('refreshBtn').classList.add('spinning');
+		clearTimeout(askTimer);
+		askTimer = setTimeout(() => {
+			askTimer = null;
+			exportTab = null;
+			$('refreshBtn').classList.remove('spinning');
+			toast('The export tab did not answer. Open the export site and click the Update Pallet Heatmap bookmark there', 'info');
+		}, 45000);
+		return true;
+	}
+
 	window.addEventListener('message', async (e) => {
 		const d = e.data;
 		if (!d || d.type !== 'pallet-heatmap:data' || !trustedOrigins.has(e.origin)) return;
 		if (e.source) e.source.postMessage({ type: 'pallet-heatmap:ack', id: d.id }, e.origin);
 		if (d.id === lastMessageId) return;
 		lastMessageId = d.id;
+		exportTab = e.source;
+		clearTimeout(askTimer);
+		askTimer = null;
+		$('refreshBtn').classList.remove('spinning');
 
 		let loaded = 0;
 		for (const s of SOURCES) {
@@ -1519,7 +1562,7 @@
 
 	/* ------------------------------------------------------------------ start */
 
-	$('refreshBtn').addEventListener('click', () => refreshFromLinks());
+	$('refreshBtn').addEventListener('click', () => { if (!askExportTab()) refreshFromLinks(); });
 	setInterval(renderUpdated, 30000);
 	if (SETTINGS.refreshMinutes > 0) {
 		// Behind SSO the bookmark does the refreshing; only poll the links if they download directly.
