@@ -194,6 +194,10 @@
 	.btn:hover { border-color: var(--border-strong); background: color-mix(in srgb, var(--surface-2) 80%, var(--border)); }
 	.btn:active { transform: translateY(1px) scale(.99); }
 	.btn .i { width: 16px; height: 16px; }
+	a.btn { text-decoration: none; }
+	.btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+	.btn-primary:hover { background: var(--accent-hover); border-color: transparent; }
+	.btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 
 	/* ------------------------------------------------------------------
 	   Summary: KPIs, view toggle, legends
@@ -325,6 +329,35 @@
 	.pill.ok { color: #17794a; border-color: color-mix(in srgb, #17794a 40%, transparent); }
 	:root[data-theme="dark"] .pill.ok { color: #4cc38a; border-color: color-mix(in srgb, #4cc38a 40%, transparent); }
 	.pill.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+	.src .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+	/* Signed-in update (bookmark) */
+	.connect {
+		display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px 24px;
+		margin-bottom: 12px; padding: 14px 16px; border-radius: 12px;
+		background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13px;
+	}
+	.connect h3 { font-size: 14px; margin-bottom: 6px; }
+	.connect ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; }
+	.connect .sub { margin-top: 8px; }
+	.connect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+	#bookmarklet { cursor: grab; }
+
+	/* Drop files anywhere */
+	#drop {
+		position: fixed; inset: 0; z-index: 60; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 24px;
+		background: color-mix(in srgb, var(--bg) 82%, transparent);
+		-webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+	}
+	.drop-zone {
+		display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center;
+		border: 2px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--muted);
+		transition: border-color .1s, background-color .1s, color .1s;
+	}
+	.drop-zone b { font-size: 18px; color: var(--text); }
+	.drop-zone .i { width: 28px; height: 28px; }
+	.drop-zone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+	.drop-zone * { pointer-events: none; }
 
 	/* ------------------------------------------------------------------
 	   Toasts
@@ -452,6 +485,21 @@
 				<button type="button" class="btn" id="sampleBtn"><svg class="i"><use href="#i-flask"/></svg>Preview with sample data</button>
 			</div>
 		</div>
+		<div class="connect">
+			<div>
+				<h3>Update from the export site (SSO sign-in)</h3>
+				<ol>
+					<li>Drag the <b>Update Pallet Heatmap</b> button to your bookmarks bar. You only do this once.</li>
+					<li>Open the export site and sign in.</li>
+					<li>Click the bookmark. The heatmap opens with fresh Verification and Ready to Stow data, and keeps refreshing while the export tab stays open.</li>
+				</ol>
+				<p class="sub" id="connectNote"></p>
+			</div>
+			<div class="connect-actions">
+				<a class="btn btn-primary" id="bookmarklet" href="#"><svg class="i"><use href="#i-refresh"/></svg>Update Pallet Heatmap</a>
+				<button type="button" class="btn" id="copyBookmarklet">Copy bookmark code</button>
+			</div>
+		</div>
 		<div class="sources" id="sources"></div>
 		<input type="file" id="fileVer" accept=".csv,.tsv,.txt,.xls,.xlsx,text/csv" hidden>
 		<input type="file" id="fileStow" accept=".csv,.tsv,.txt,.xls,.xlsx,text/csv" hidden>
@@ -460,6 +508,10 @@
 </main>
 
 <div id="tip" role="tooltip" hidden></div>
+<div id="drop" hidden>
+	<div class="drop-zone" data-source="verification"><svg class="i"><use href="#i-upload"/></svg><b>Verification</b><span>Drop the export file here</span></div>
+	<div class="drop-zone" data-source="stow"><svg class="i"><use href="#i-upload"/></svg><b>Ready to Stow</b><span>Drop the export file here</span></div>
+</div>
 <div id="toasts" role="status" aria-live="polite"></div>
 
 
@@ -748,7 +800,7 @@
 	/** Rows -> { bins, stats }. Drops Case-Flow, other bin types and bins outside the map. */
 	function rowsToBins(rows, sourceName) {
 		const cols = findColumns(rows);
-		if (!cols) throw new Error(sourceName + ': could not find a Bin Id column in the export.');
+		if (!cols) throw new Error(sourceName + ': could not find a Bin Id column. The link may have returned the sign-in page instead of the export; sign in and try again.');
 		if (cols.binType === -1) throw new Error(sourceName + ': could not find a Bin Type column, so Case-Flow bins cannot be filtered out.');
 
 		const stats = { rows: 0, shown: 0, caseFlow: 0, otherType: 0, unmapped: 0, duplicate: 0 };
@@ -811,6 +863,12 @@
 		meta[source.id] = { updated: Date.now(), origin, fileName: fileName || null, stats, error: null };
 	}
 
+	/*
+	 * Direct download from the links only works if the export site lets this page read it.
+	 * Behind an SSO sign-in it normally does not (the redirect to the sign-in page is blocked),
+	 * so directBlocked is set and the data comes from the bookmark or a dropped file instead.
+	 */
+	let directBlocked = false;
 	let loading = false;
 	async function refreshFromLinks(opts) {
 		opts = opts || {};
@@ -824,31 +882,47 @@
 		loading = true;
 		$('refreshBtn').classList.add('spinning');
 
-		const results = await Promise.allSettled(ready.map(async (s) => {
+		let blocked = 0, failed = 0;
+		await Promise.all(ready.map(async (s) => {
 			let res;
 			try {
 				res = await fetch(s.link.trim(), { credentials: 'include', cache: 'no-store' });
 			} catch (e) {
-				throw new Error(s.name + ': the download was blocked (sign-in or cross-site access). Download the file and use Load file.');
+				blocked++;
+				return;
 			}
-			if (!res.ok) throw new Error(s.name + ': the link answered ' + res.status + ' ' + res.statusText + '.');
-			await ingest(s, await res.arrayBuffer(), 'link');
+			if (res.status === 401 || res.status === 403) { blocked++; return; }
+			try {
+				if (!res.ok) throw new Error(s.name + ': the link answered ' + res.status + ' ' + res.statusText + '.');
+				await ingest(s, await res.arrayBuffer(), 'link');
+			} catch (e) {
+				failed++;
+				meta[s.id] = Object.assign({}, meta[s.id], { error: e.message });
+			}
 		}));
+		directBlocked = blocked > 0;
 
-		const errors = [];
-		results.forEach((r, i) => {
-			if (r.status === 'rejected') {
-				errors.push(r.reason.message);
-				meta[ready[i].id] = Object.assign({}, meta[ready[i].id], { error: r.reason.message });
-			}
-		});
 		loading = false;
 		$('refreshBtn').classList.remove('spinning');
 		saveCache();
 		render();
-		if (errors.length) toast(errors.length === ready.length ? 'Could not refresh the data' : 'Some data could not be refreshed', 'error');
-		else if (!opts.quiet) toast('Heatmap updated');
+		if (opts.quiet) return;
+		if (blocked) toast('The export site needs your sign-in. Use the Update Pallet Heatmap bookmark, or drop the downloaded files here', 'error');
+		else if (failed) toast(failed === ready.length ? 'Could not refresh the data' : 'Some data could not be refreshed', 'error');
+		else toast('Heatmap updated');
 	}
+
+	/* Open an export link in a new tab so SSO can sign you in, then try again when you come back. */
+	let retryOnReturn = false;
+	function signIn(source) {
+		window.open(source.link.trim(), '_blank', 'noopener');
+		retryOnReturn = true;
+	}
+	window.addEventListener('focus', () => {
+		if (!retryOnReturn) return;
+		retryOnReturn = false;
+		refreshFromLinks();
+	});
 
 	function loadFile(source, file) {
 		file.arrayBuffer()
@@ -867,6 +941,168 @@
 			if (f) loadFile(s, f);
 			e.target.value = '';
 		});
+	});
+
+	/* ------------------------------------------------- drop files on the page */
+
+	let dragDepth = 0;
+	const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') !== -1;
+	const sourceById = (id) => SOURCES.find((s) => s.id === id);
+	const zoneAt = (e) => (e.target.closest ? e.target.closest('.drop-zone') : null);
+
+	document.addEventListener('dragenter', (e) => {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		dragDepth++;
+		$('drop').hidden = false;
+	});
+	document.addEventListener('dragleave', (e) => {
+		if (!hasFiles(e)) return;
+		if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; }
+	});
+	document.addEventListener('dragover', (e) => {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		const zone = zoneAt(e);
+		document.querySelectorAll('.drop-zone').forEach((z) => z.classList.toggle('over', z === zone));
+		e.dataTransfer.dropEffect = zone ? 'copy' : 'none';
+	});
+	document.addEventListener('drop', (e) => {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		dragDepth = 0;
+		$('drop').hidden = true;
+		document.querySelectorAll('.drop-zone').forEach((z) => z.classList.remove('over'));
+		const zone = zoneAt(e);
+		const files = Array.from(e.dataTransfer.files);
+		if (!zone || !files.length) return;
+		// Both exports dropped at once: sort them by file name when the names make it clear.
+		if (files.length > 1) {
+			const named = files.map((f) => [f, /verif/i.test(f.name) ? 'verification' : /stow/i.test(f.name) ? 'stow' : null]);
+			if (named.every((n) => n[1]) && new Set(named.map((n) => n[1])).size === named.length) {
+				named.forEach((n) => loadFile(sourceById(n[1]), n[0]));
+				return;
+			}
+		}
+		loadFile(sourceById(zone.dataset.source), files[0]);
+	});
+
+	/* --------------------------------------------- signed-in update bookmark */
+
+	/*
+	 * Runs on the export site when the bookmark is clicked. Because it runs inside the
+	 * signed-in tab, the SSO session applies to its downloads. It opens this page, sends it
+	 * the files, and repeats every few minutes while both tabs stay open.
+	 * It is turned into a bookmark with toString(), so it must not use anything outside itself.
+	 */
+	function heatmapBookmark(cfg) {
+		var mine = Object.keys(cfg.links).filter(function (k) {
+			try { return new URL(cfg.links[k], location.href).origin === location.origin; } catch (e) { return false; }
+		});
+		if (!mine.length) {
+			alert('Pallet Heatmap: open the export site and sign in first, then click this bookmark again.');
+			return;
+		}
+		var w = window.open(cfg.url, 'pallet-heatmap');
+		if (!w) { alert('Pallet Heatmap: allow pop-ups for this site, then click the bookmark again.'); return; }
+		var target = cfg.origin === 'null' ? '*' : cfg.origin;
+		var acked = {};
+		window.addEventListener('message', function (e) {
+			if (e.source === w && e.data && e.data.type === 'pallet-heatmap:ack') acked[e.data.id] = true;
+		});
+		function send() {
+			if (w.closed) { clearInterval(window.__palletHeatmapTimer); return; }
+			var id = Date.now() + '-' + Math.random(), files = {}, errors = {};
+			Promise.all(mine.map(function (k) {
+				return fetch(cfg.links[k], { credentials: 'include', cache: 'no-store' })
+					.then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+					.then(function (b) { files[k] = b; }, function (err) { errors[k] = String((err && err.message) || err); });
+			})).then(function () {
+				var tries = 0;
+				(function post() {
+					if (acked[id] || w.closed || tries++ > 60) return;
+					w.postMessage({ type: 'pallet-heatmap:data', id: id, files: files, errors: errors }, target);
+					setTimeout(post, 500);
+				})();
+			});
+		}
+		clearInterval(window.__palletHeatmapTimer);
+		send();
+		if (cfg.minutes > 0) window.__palletHeatmapTimer = setInterval(send, cfg.minutes * 60000);
+	}
+
+	const bookmarkReady = () => SOURCES.every((s) => linkSet(s.link)) && /^https?:$/.test(location.protocol);
+
+	function bookmarkCode() {
+		const cfg = {
+			url: location.href.split('#')[0],
+			origin: location.origin,
+			minutes: SETTINGS.refreshMinutes,
+			links: { verification: DATA_LINKS.verification.trim(), stow: DATA_LINKS.readyToStow.trim() }
+		};
+		return 'javascript:' + encodeURIComponent('(' + heatmapBookmark.toString() + ')(' + JSON.stringify(cfg) + ')');
+	}
+
+	function setupBookmark() {
+		const a = $('bookmarklet');
+		const note = $('connectNote');
+		if (!SOURCES.every((s) => linkSet(s.link))) {
+			note.textContent = 'Add both export links in DATA_LINKS first. The bookmark is built from them.';
+		} else if (!/^https?:$/.test(location.protocol)) {
+			note.textContent = 'Open this page from its web address (not a saved file) for the bookmark to work.';
+		} else {
+			note.textContent = 'If you change DATA_LINKS or move this page, drag the button to your bookmarks bar again.';
+		}
+		if (bookmarkReady()) {
+			a.href = bookmarkCode();
+			a.removeAttribute('aria-disabled');
+		} else {
+			a.href = '#';
+			a.setAttribute('aria-disabled', 'true');
+		}
+	}
+
+	$('bookmarklet').addEventListener('click', (e) => {
+		e.preventDefault();
+		toast(bookmarkReady() ? 'Drag this button to your bookmarks bar, then click it on the export site' : $('connectNote').textContent, bookmarkReady() ? '' : 'error');
+	});
+	$('copyBookmarklet').addEventListener('click', () => {
+		if (!bookmarkReady()) { toast($('connectNote').textContent, 'error'); return; }
+		navigator.clipboard.writeText(bookmarkCode())
+			.then(() => toast('Copied. Make a new bookmark and paste this as its URL'))
+			.catch(() => toast('Could not copy. Drag the button to your bookmarks bar instead', 'error'));
+	});
+
+	// Lets the bookmark find this tab again instead of opening a new one.
+	window.name = 'pallet-heatmap';
+
+	// Data sent by the bookmark. Only accepted from the export site's own address.
+	const trustedOrigins = new Set();
+	SOURCES.forEach((s) => { if (linkSet(s.link)) trustedOrigins.add(new URL(s.link.trim()).origin); });
+	let lastMessageId = null;
+	window.addEventListener('message', async (e) => {
+		const d = e.data;
+		if (!d || d.type !== 'pallet-heatmap:data' || !trustedOrigins.has(e.origin)) return;
+		if (e.source) e.source.postMessage({ type: 'pallet-heatmap:ack', id: d.id }, e.origin);
+		if (d.id === lastMessageId) return;
+		lastMessageId = d.id;
+
+		let loaded = 0;
+		for (const s of SOURCES) {
+			if (!linkSet(s.link) || new URL(s.link.trim()).origin !== e.origin) continue;
+			const buf = d.files && d.files[s.id];
+			try {
+				if (buf instanceof ArrayBuffer) { await ingest(s, buf, 'bookmark'); loaded++; }
+				else if (d.errors && d.errors[s.id]) {
+					throw new Error(s.name + ': the export site refused the download (' + d.errors[s.id] + '). Sign in again on the export site, then click the bookmark.');
+				}
+			} catch (err) {
+				meta[s.id] = Object.assign({}, meta[s.id], { error: err.message });
+			}
+		}
+		saveCache();
+		render();
+		toast(loaded ? 'Heatmap updated from the export site' : 'The export site did not send any data', loaded ? '' : 'error');
 	});
 
 	/** Made-up bins (including Case-Flow rows that must be dropped) for previewing the layout. */
@@ -997,12 +1233,16 @@
 		const errors = SOURCES.map((s) => meta[s.id].error).filter(Boolean);
 		const missing = SOURCES.filter((s) => !linkSet(s.link));
 		const sample = SOURCES.some((s) => meta[s.id].origin === 'sample');
+		const realData = SOURCES.some((s) => meta[s.id].updated && meta[s.id].origin !== 'sample');
 		let kind = '', lines = [];
 		if (errors.length) { kind = 'error'; lines = errors; }
 		else if (sample) lines = ['You are looking at made-up sample data. Refresh or load the real exports to replace it.'];
 		else if (missing.length) {
 			lines = ['Add the ' + missing.map((s) => s.name).join(' and ') + ' export link' + (missing.length > 1 ? 's' : '') +
-				' in DATA_LINKS at the top of the page script, or load the downloaded files below.'];
+				' in DATA_LINKS at the top of the page script, or drop the downloaded files on this page.'];
+		} else if (directBlocked && !realData) {
+			lines = ['The export site needs your SSO sign-in, so this page cannot download the files by itself. ' +
+				'Use the Update Pallet Heatmap bookmark under Data sources, or sign in, download both exports and drop them on this page.'];
 		}
 		b.hidden = !lines.length;
 		if (!lines.length) return;
@@ -1109,14 +1349,16 @@
 			const m = meta[s.id];
 			const box = el('div', 'src');
 			const h = el('h3', null, s.name);
+			const ORIGINS = { link: 'From link', bookmark: 'From bookmark', file: 'From file', sample: 'Sample' };
 			const pill = el('span', 'pill' + (m.error ? ' bad' : m.updated ? ' ok' : ''),
-				m.error ? 'Failed' : m.updated ? (m.origin === 'file' ? 'From file' : m.origin === 'sample' ? 'Sample' : 'From link') : 'Not loaded');
+				m.error ? 'Failed' : m.updated ? ORIGINS[m.origin] || 'Loaded' : 'Not loaded');
 			h.appendChild(pill);
 			box.appendChild(h);
 
 			const dl = el('dl');
 			const row = (k, v) => { dl.appendChild(el('dt', null, k)); dl.appendChild(el('dd', null, v)); };
 			row('Link', linkSet(s.link) ? s.link : 'Not set (DATA_LINKS.' + (s.id === 'stow' ? 'readyToStow' : 'verification') + ')');
+			if (linkSet(s.link) && directBlocked) row('Direct download', 'Needs sign-in (use the bookmark or drop the file)');
 			if (m.fileName) row('File', m.fileName);
 			row('Updated', m.updated ? stamp(m.updated) + ' (' + ago(m.updated) + ')' : '–');
 			if (m.stats) {
@@ -1129,12 +1371,23 @@
 			if (m.error) row('Error', m.error);
 			box.appendChild(dl);
 
+			const actions = el('div', 'actions');
+			if (linkSet(s.link)) {
+				const signBtn = el('button', 'btn');
+				signBtn.type = 'button';
+				signBtn.appendChild(icon('refresh'));
+				signBtn.append('Sign in & download');
+				signBtn.title = 'Opens the export link in a new tab so you can sign in. The page tries again when you come back.';
+				signBtn.addEventListener('click', () => signIn(s));
+				actions.appendChild(signBtn);
+			}
 			const btn = el('button', 'btn');
 			btn.type = 'button';
 			btn.appendChild(icon('upload'));
 			btn.append('Load ' + s.name + ' file');
 			btn.addEventListener('click', () => $(s.input).click());
-			box.appendChild(btn);
+			actions.appendChild(btn);
+			box.appendChild(actions);
 			host.appendChild(box);
 		});
 		const anyData = SOURCES.some((s) => meta[s.id].updated && meta[s.id].origin !== 'sample');
@@ -1297,9 +1550,11 @@
 	$('refreshBtn').addEventListener('click', () => refreshFromLinks());
 	setInterval(renderUpdated, 30000);
 	if (SETTINGS.refreshMinutes > 0) {
-		setInterval(() => refreshFromLinks({ quiet: true }), SETTINGS.refreshMinutes * 60000);
+		// Behind SSO the bookmark does the refreshing; only poll the links if they download directly.
+		setInterval(() => { if (!directBlocked) refreshFromLinks({ quiet: true }); }, SETTINGS.refreshMinutes * 60000);
 	}
 
+	setupBookmark();
 	loadCache();
 	render();
 	refreshFromLinks({ quiet: true });
