@@ -1,0 +1,22 @@
+{
+	"manifest_version": 3,
+	"name": "Pallet Heatmap Auto-Update",
+	"version": "1.0.0",
+	"description": "Downloads the Verification and Ready to Stow exports with your signed-in session and sends them to the Pallet Heatmap.",
+	"host_permissions": [
+		"https://paste-export-site-domain-here/*"
+	],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"content_scripts": [
+		{
+			"matches": [
+				"https://paste-heatmap-site-domain-here/*",
+				"file:///*pallet-heatmap.html"
+			],
+			"js": ["content.js"],
+			"run_at": "document_idle"
+		}
+	]
+}
