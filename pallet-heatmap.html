@@ -52,6 +52,9 @@
 		--half: #8a94a3;        /* Half-Pallet */
 		--full-soft: rgba(242, 140, 40, .16);
 		--half-soft: rgba(138, 148, 163, .18);
+		--case: #c4372a;        /* Case-Flow */
+		--case-soft: rgba(196, 55, 42, .12);
+		--ink-light-case: #4a0d07;  /* numbers on light-red cells */
 
 		--radius: 16px;
 		--radius-sm: 10px;
@@ -80,6 +83,8 @@
 		--half: #9aa5b5;
 		--full-soft: rgba(242, 140, 40, .2);
 		--half-soft: rgba(154, 165, 181, .18);
+		--case: #e5534b;
+		--case-soft: rgba(229, 83, 75, .18);
 		color-scheme: dark;
 	}
 
@@ -191,6 +196,7 @@
 	.kpi .k-value.time { font-size: 20px; padding-top: 6px; }
 
 	.controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-top: 16px; }
+	.ctl-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; }
 	.ctl-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 	.ctl-label { font-size: 12px; font-weight: 600; color: var(--muted); }
 
@@ -202,6 +208,12 @@
 	.seg button:hover { color: var(--text); }
 	.seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 	.seg .n { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: .8; }
+	/* Phones: the toggles share the full width and the counts go under the labels. */
+	@media (max-width: 560px) {
+		.ctl-row, .ctl-group, .seg { width: 100%; }
+		.seg button { flex: 1 1 0; min-width: 0; height: auto; min-height: 32px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
+		.seg .n { display: block; margin-left: 0; }
+	}
 
 	.legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--muted); }
 	.ramp { display: flex; align-items: center; gap: 8px; }
@@ -212,6 +224,7 @@
 	.swatch i.zero { background: var(--cell-empty); border: 1px solid var(--border-strong); }
 	.swatch i.full { background: var(--full); }
 	.swatch i.half { background: var(--half); }
+	.swatch i.case { background: var(--case); }
 
 	.banner {
 		display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 10px 14px; border-radius: 12px;
@@ -282,11 +295,13 @@
 	}
 	#tip .bin.full { background: var(--full-soft); border-left-color: var(--full); }
 	#tip .bin.half { background: var(--half-soft); border-left-color: var(--half); }
+	#tip .bin.case { background: var(--case-soft); border-left-color: var(--case); }
 	#tip .bin code { font-weight: 600; font-size: 12.5px; user-select: all; }
 	#tip .type { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
 	#tip .bin.full .type { background: var(--full); color: #241200; }
 	#tip .bin.half .type { background: var(--half); color: #ffffff; }
 	:root[data-theme="dark"] #tip .bin.half .type { color: #0d1219; }
+	#tip .bin.case .type { background: var(--case); color: #ffffff; }
 	#tip .more { padding: 4px 12px; color: var(--muted); font-size: 12px; }
 	#tip .t-foot { padding: 6px 12px 8px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
 
@@ -383,7 +398,7 @@
 			<span class="logo"><svg class="i"><use href="#i-grid"/></svg></span>
 			<div>
 				<h1>Pallet Heatmap</h1>
-				<span class="tag">Empty bins · Full &amp; Half Pallet</span>
+				<span class="tag">Empty bins · Pallets &amp; Case Flow</span>
 			</div>
 		</div>
 		<div class="top-actions">
@@ -426,19 +441,29 @@
 		</div>
 
 		<div class="controls">
-			<div class="ctl-group">
-				<span class="ctl-label" id="viewLabel">Show</span>
-				<div class="seg" role="radiogroup" aria-labelledby="viewLabel" id="viewSeg">
-					<button type="button" role="radio" data-view="all">Total<span class="n" id="segAll"></span></button>
-					<button type="button" role="radio" data-view="verification">Verification<span class="n" id="segVer"></span></button>
-					<button type="button" role="radio" data-view="stow">Ready to Stow<span class="n" id="segStow"></span></button>
+			<div class="ctl-row">
+				<div class="ctl-group">
+					<span class="ctl-label" id="gridLabel">Grid</span>
+					<div class="seg" role="radiogroup" aria-labelledby="gridLabel" id="gridSeg">
+						<button type="button" role="radio" data-grid="pallet">Pallets<span class="n" id="gridPallet"></span></button>
+						<button type="button" role="radio" data-grid="case">Case Flow<span class="n" id="gridCase"></span></button>
+					</div>
+				</div>
+				<div class="ctl-group">
+					<span class="ctl-label" id="viewLabel">Show</span>
+					<div class="seg" role="radiogroup" aria-labelledby="viewLabel" id="viewSeg">
+						<button type="button" role="radio" data-view="all">Total<span class="n" id="segAll"></span></button>
+						<button type="button" role="radio" data-view="verification">Verification<span class="n" id="segVer"></span></button>
+						<button type="button" role="radio" data-view="stow">Ready to Stow<span class="n" id="segStow"></span></button>
+					</div>
 				</div>
 			</div>
 			<div class="legend" aria-label="Legend">
 				<span class="swatch"><i class="zero"></i>0</span>
 				<span class="ramp"><span class="num">1</span><span class="ramp-bar" id="rampBar"></span><span class="num" id="rampMax">1</span><span>empty bins</span></span>
-				<span class="swatch"><i class="full"></i>Pallet-Single (Full)</span>
-				<span class="swatch"><i class="half"></i>Half-Pallet</span>
+				<span class="swatch" data-grid="pallet"><i class="full"></i>Pallet-Single (Full)</span>
+				<span class="swatch" data-grid="pallet"><i class="half"></i>Half-Pallet</span>
+				<span class="swatch" data-grid="case"><i class="case"></i>Case-Flow</span>
 			</div>
 		</div>
 
@@ -453,7 +478,7 @@
 		<div class="card-head">
 			<div>
 				<h2 id="srcTitle">Data sources</h2>
-				<p class="sub">Case-Flow bins are always dropped. Only Pallet-Single and Half-Pallet bins are mapped.</p>
+				<p class="sub">Pallet-Single and Half-Pallet bins go on the Pallets grid, Case-Flow bins on the Case Flow grid. Other bin types are skipped.</p>
 			</div>
 			<div class="ctl-group">
 				<button type="button" class="btn" id="sampleBtn"><svg class="i"><use href="#i-flask"/></svg>Preview with sample data</button>
@@ -530,11 +555,12 @@
 		binIdPattern: /(\d{3})[-\s]?([A-Z])[-\s]?\d+\s*$/i,
 
 		/*
-		 * Bin types. Case-Flow is checked first and is NEVER shown or counted.
-		 * Any other type that is not Pallet-Single or Half-Pallet is ignored too.
+		 * Bin types. The type decides the grid: Pallet-Single and Half-Pallet go on the
+		 * Pallets grid, Case-Flow on the Case Flow grid (never on the Pallets grid).
+		 * Any other type is ignored.
 		 */
-		excludeTypes: /case[^a-z]*flow/i,
 		binTypes: [
+			{ id: 'case', label: 'Case-Flow',     match: /case[^a-z]*flow/i },
 			{ id: 'half', label: 'Half-Pallet',   match: /half[^a-z]*pallet/i },
 			{ id: 'full', label: 'Pallet-Single', match: /pallet[^a-z]*single/i }
 		]
@@ -543,13 +569,27 @@
 	/*
 	 * HEATMAP LAYOUT
 	 * --------------
-	 * Each section is one grid. Levels are listed bottom to top (A is the bottom row).
+	 * The Grid toggle switches between the Pallets grid and the Case Flow grid. Each section
+	 * below belongs to one of them (grid) and shows the bin types listed in types.
+	 * Levels are listed bottom to top (A is the bottom row).
 	 * aislesPerRow decides how many aisles go across before wrapping to the next band.
 	 */
+
+	// Aisles in the 200s and 300s, shared by the Half Pallet and Case Flow grids.
+	const AISLES_200_319 = [
+		200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 212, 213, 214, 215, 216, 217, 218, 219,
+		220, 221, 224, 225, 226, 227, 228, 229, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
+		244, 245, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 260, 261, 262, 263, 264, 265,
+		266, 267, 268, 269, 272, 273, 274, 275, 276, 277, 278, 299, 300, 301, 302, 303, 304, 305,
+		308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319
+	];
+
 	const SECTIONS = [
 		{
 			id: 'full',
+			grid: 'pallet',
 			name: 'Full Pallet',
+			types: ['full', 'half'],
 			aislesPerRow: 27,
 			levels: ['A', 'E', 'G', 'J', 'K'],
 			aisles: [
@@ -560,16 +600,21 @@
 		},
 		{
 			id: 'half',
+			grid: 'pallet',
 			name: 'Half Pallet',
+			types: ['full', 'half'],
 			aislesPerRow: 28,
 			levels: ['A', 'E', 'F', 'G', 'H', 'J', 'K'],
-			aisles: [
-				200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 212, 213, 214, 215, 216, 217, 218, 219,
-				220, 221, 224, 225, 226, 227, 228, 229, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
-				244, 245, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 260, 261, 262, 263, 264, 265,
-				266, 267, 268, 269, 272, 273, 274, 275, 276, 277, 278, 299, 300, 301, 302, 303, 304, 305,
-				308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319
-			]
+			aisles: AISLES_200_319
+		},
+		{
+			id: 'case',
+			grid: 'case',
+			name: 'Case Flow',
+			types: ['case'],
+			aislesPerRow: 28,
+			levels: ['A', 'B', 'C', 'D'],
+			aisles: AISLES_200_319
 		}
 	];
 </script>
@@ -661,7 +706,7 @@
 	];
 	const VIEW_NAMES = { all: 'Total', verification: 'Verification', stow: 'Ready to Stow' };
 
-	// Parsed bins: { id, type: 'full' | 'half', typeLabel, aisle, level }
+	// Parsed bins: { id, type: 'full' | 'half' | 'case', typeLabel, aisle, level }
 	let pendingVerificationBins = [];
 	let pendingStowBins = [];
 	// Per source: { updated, origin: 'link' | 'file' | 'sample', fileName, stats, error }
@@ -669,15 +714,26 @@
 	let view = store.get('ph:view', 'all');
 	if (!VIEW_NAMES[view]) view = 'all';
 
+	// The two grids. Light to dark: fewest to most empty bins.
+	const GRIDS = {
+		pallet: { name: 'Pallets', ramp: ['#deedfb', '#b3d3f2', '#7fb0e3', '#4b8bd0', '#2766b3', '#0f458c', '#062a5e'], ink: 'var(--ink-light)' },
+		case: { name: 'Case Flow', ramp: ['#fde3e0', '#f9bdb5', '#f2928a', '#e5655a', '#cc3b31', '#a3221b', '#6e110c'], ink: 'var(--ink-light-case)' }
+	};
+	let grid = store.get('ph:grid', 'pallet');
+	if (!GRIDS[grid]) grid = 'pallet';
+	const gridOf = (b) => (b.type === 'case' ? 'case' : 'pallet');
+
 	const binsOf = (id) => (id === 'verification' ? pendingVerificationBins : pendingStowBins);
 	function setBins(id, bins) {
 		if (id === 'verification') pendingVerificationBins = bins;
 		else pendingStowBins = bins;
 	}
 
-	// Lookup: aisle -> section, and "section|level" -> true
-	const AISLE_SECTION = new Map();
-	SECTIONS.forEach((s) => s.aisles.forEach((a) => AISLE_SECTION.set(String(a), s)));
+	// The section a bin belongs on, by its type, aisle and level (null = not on any grid).
+	SECTIONS.forEach((s) => { s.aisleSet = new Set(s.aisles.map(String)); });
+	const sectionFor = (type, aisle, level) => SECTIONS.find((s) =>
+		s.types.indexOf(type) !== -1 && s.levels.indexOf(level) !== -1 && s.aisleSet.has(aisle)) || null;
+	const cellKey = (section, aisle, level) => section + '|' + aisle + '|' + level;
 	const linkSet = (url) => /^https?:\/\//i.test(String(url || '').trim());
 
 	/* ------------------------------------------------------------ file parsing */
@@ -766,17 +822,16 @@
 
 	function classifyType(raw) {
 		const t = String(raw || '').trim();
-		if (!t || SETTINGS.excludeTypes.test(t)) return null;
-		return SETTINGS.binTypes.find((bt) => bt.match.test(t)) || null;
+		return t ? SETTINGS.binTypes.find((bt) => bt.match.test(t)) || null : null;
 	}
 
-	/** Rows -> { bins, stats }. Drops Case-Flow, other bin types and bins outside the map. */
+	/** Rows -> { bins, stats }. Drops other bin types and bins outside the grids. */
 	function rowsToBins(rows, sourceName) {
 		const cols = findColumns(rows);
 		if (!cols) throw new Error(sourceName + ': could not find a Bin Id column. The link may have returned the sign-in page instead of the export; sign in and try again.');
-		if (cols.binType === -1) throw new Error(sourceName + ': could not find a Bin Type column, so Case-Flow bins cannot be filtered out.');
+		if (cols.binType === -1) throw new Error(sourceName + ': could not find a Bin Type column, so bins cannot be split into Pallets and Case Flow.');
 
-		const stats = { rows: 0, shown: 0, caseFlow: 0, otherType: 0, unmapped: 0, duplicate: 0 };
+		const stats = { rows: 0, shown: 0, pallet: 0, caseFlow: 0, otherType: 0, unmapped: 0, duplicate: 0 };
 		const seen = new Set();
 		const bins = [];
 		for (let r = cols.headerRow + 1; r < rows.length; r++) {
@@ -785,9 +840,7 @@
 			if (!id) continue;
 			stats.rows++;
 
-			const rawType = String(row[cols.binType] || '').trim();
-			if (SETTINGS.excludeTypes.test(rawType)) { stats.caseFlow++; continue; }
-			const type = classifyType(rawType);
+			const type = classifyType(row[cols.binType]);
 			if (!type) { stats.otherType++; continue; }
 
 			let aisle = cols.aisle !== -1 ? String(row[cols.aisle] || '').trim() : '';
@@ -798,12 +851,12 @@
 			}
 			aisle = String(parseInt(aisle, 10));
 			level = level.toUpperCase();
-			const section = AISLE_SECTION.get(aisle);
-			if (!section || section.levels.indexOf(level) === -1) { stats.unmapped++; continue; }
+			if (!sectionFor(type.id, aisle, level)) { stats.unmapped++; continue; }
 
 			if (seen.has(id)) { stats.duplicate++; continue; }
 			seen.add(id);
 			bins.push({ id, type: type.id, typeLabel: type.label, aisle, level });
+			if (type.id === 'case') stats.caseFlow++; else stats.pallet++;
 		}
 		stats.shown = bins.length;
 		return { bins, stats };
@@ -1120,7 +1173,7 @@
 		toast(loaded ? 'Heatmap updated from the export site' : 'The export site did not send any data', loaded ? '' : 'error');
 	});
 
-	/** Made-up bins (including Case-Flow rows that must be dropped) for previewing the layout. */
+	/** Made-up bins (plus a few of other types that must be skipped) for previewing the layout. */
 	function loadSample() {
 		let seed = 7;
 		const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -1135,10 +1188,11 @@
 						const n = 1 + Math.floor(rand() * rand() * (hot.has(String(a)) ? 9 : 4));
 						for (let k = 0; k < n; k++) {
 							const pos = String(100 + Math.floor(rand() * 80) + k * 2 + si).padStart(3, '0');
-							const type = sec.id === 'full' ? (rand() < .85 ? 'Pallet-Single' : 'Half-Pallet') : (rand() < .85 ? 'Half-Pallet' : 'Pallet-Single');
-							rows.push(['P-1-B' + a + lv + pos, type, s.name]);
+							const type = sec.id === 'case' ? 'Case-Flow'
+								: sec.id === 'full' ? (rand() < .85 ? 'Pallet-Single' : 'Half-Pallet') : (rand() < .85 ? 'Half-Pallet' : 'Pallet-Single');
+							rows.push(['P-1-' + (sec.id === 'case' ? 'C' : 'B') + a + lv + pos, type, s.name]);
 						}
-						if (rand() < .3) rows.push(['P-1-C' + a + lv + '0' + si + '1', 'Case-Flow', s.name]);
+						if (rand() < .1) rows.push(['P-1-S' + a + lv + '0' + si + '1', 'Shelf', s.name]);
 					});
 				});
 			});
@@ -1153,30 +1207,28 @@
 
 	/* ------------------------------------------------------------- colours */
 
-	// Light blue (fewest empty bins) -> dark blue (most).
-	const RAMP = ['#deedfb', '#b3d3f2', '#7fb0e3', '#4b8bd0', '#2766b3', '#0f458c', '#062a5e'];
-	$('rampBar').style.background = 'linear-gradient(90deg,' + RAMP.join(',') + ')';
-
 	const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-	function rampAt(t) {
-		const x = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
-		const i = Math.min(Math.floor(x), RAMP.length - 2);
+	function rampAt(ramp, t) {
+		const x = Math.max(0, Math.min(1, t)) * (ramp.length - 1);
+		const i = Math.min(Math.floor(x), ramp.length - 2);
 		const f = x - i;
-		const a = hexRgb(RAMP[i]), b = hexRgb(RAMP[i + 1]);
+		const a = hexRgb(ramp[i]), b = hexRgb(ramp[i + 1]);
 		return 'rgb(' + a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',') + ')';
 	}
 
 	/* ------------------------------------------------------------- rendering */
 
 	const tip = $('tip');
-	let cellIndex = new Map();   // "aisle|level" -> { verification: [], stow: [] }
+	let cellIndex = new Map();   // "section|aisle|level" -> { verification: [], stow: [] }
 	let pinnedCell = null;
 
 	function buildIndex() {
 		cellIndex = new Map();
 		SOURCES.forEach((s) => {
 			binsOf(s.id).forEach((b) => {
-				const key = b.aisle + '|' + b.level;
+				const sec = sectionFor(b.type, b.aisle, b.level);
+				if (!sec) return;
+				const key = cellKey(sec.id, b.aisle, b.level);
 				let c = cellIndex.get(key);
 				if (!c) cellIndex.set(key, c = { verification: [], stow: [] });
 				c[s.id].push(b);
@@ -1196,19 +1248,30 @@
 	}
 
 	function renderSummary() {
-		const v = pendingVerificationBins.length, s = pendingStowBins.length;
-		const all = pendingVerificationBins.concat(pendingStowBins);
-		const full = all.filter((b) => b.type === 'full').length;
+		// Totals are for the grid on screen.
+		const ver = pendingVerificationBins.filter((b) => gridOf(b) === grid);
+		const stow = pendingStowBins.filter((b) => gridOf(b) === grid);
+		const v = ver.length, s = stow.length;
+		const full = ver.concat(stow).filter((b) => b.type === 'full').length;
 		const hasData = SOURCES.some((src) => meta[src.id].updated);
 		$('totVer').textContent = hasData ? fmt(v) : '–';
 		$('totStow').textContent = hasData ? fmt(s) : '–';
 		$('totAll').textContent = hasData ? fmt(v + s) : '–';
-		$('totSplit').textContent = hasData
-			? 'Pallet-Single ' + fmt(full) + ' · Half-Pallet ' + fmt(all.length - full)
-			: 'Pallet-Single – · Half-Pallet –';
+		$('totSplit').textContent = grid === 'case'
+			? 'Case-Flow · levels A–D'
+			: hasData ? 'Pallet-Single ' + fmt(full) + ' · Half-Pallet ' + fmt(v + s - full) : 'Pallet-Single – · Half-Pallet –';
 		$('segAll').textContent = hasData ? fmt(v + s) : '';
 		$('segVer').textContent = hasData ? fmt(v) : '';
 		$('segStow').textContent = hasData ? fmt(s) : '';
+
+		// Grid buttons show how many bins each grid has for the Show selection.
+		const gridCount = (g) => SOURCES.reduce((n, src) =>
+			n + (view === 'all' || view === src.id ? binsOf(src.id).filter((b) => gridOf(b) === g).length : 0), 0);
+		$('gridPallet').textContent = hasData ? fmt(gridCount('pallet')) : '';
+		$('gridCase').textContent = hasData ? fmt(gridCount('case')) : '';
+		document.querySelectorAll('#gridSeg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.grid === grid)));
+		document.querySelectorAll('.legend .swatch[data-grid]').forEach((sw) => { sw.hidden = sw.dataset.grid !== grid; });
+		$('rampBar').style.background = 'linear-gradient(90deg,' + GRIDS[grid].ramp.join(',') + ')';
 
 		$('kpiVer').className = 'kpi' + (view === 'verification' ? ' active' : view === 'stow' ? ' dim' : '');
 		$('kpiStow').className = 'kpi' + (view === 'stow' ? ' active' : view === 'verification' ? ' dim' : '');
@@ -1269,14 +1332,18 @@
 	}
 
 	function renderSections() {
+		const shown = SECTIONS.filter((sec) => sec.grid === grid);
+		const ramp = GRIDS[grid].ramp;
 		let max = 0;
-		cellIndex.forEach((c) => { max = Math.max(max, countFor(c)); });
+		shown.forEach((sec) => sec.aisles.forEach((a) => sec.levels.forEach((lv) => {
+			max = Math.max(max, countFor(cellIndex.get(cellKey(sec.id, a, lv))));
+		})));
 		$('rampMax').textContent = String(Math.max(max, 1));
 		const host = $('sections');
 		host.replaceChildren();
 		hideTip(true);
 
-		SECTIONS.forEach((sec) => {
+		shown.forEach((sec) => {
 			const card = el('section', 'card');
 			card.setAttribute('aria-label', sec.name + ' heatmap');
 			const head = el('div', 'card-head');
@@ -1286,7 +1353,7 @@
 			sec.levels.forEach((lv) => { perLevel[lv] = 0; });
 			let total = 0;
 			sec.aisles.forEach((a) => sec.levels.forEach((lv) => {
-				const n = countFor(cellIndex.get(a + '|' + lv));
+				const n = countFor(cellIndex.get(cellKey(sec.id, a, lv)));
 				perLevel[lv] += n; total += n;
 			}));
 
@@ -1325,16 +1392,17 @@
 						const a = aisles[k];
 						const cell = el('div', 'cell');
 						if (a != null) {
-							const c = cellIndex.get(a + '|' + lv);
+							const c = cellIndex.get(cellKey(sec.id, a, lv));
 							const n = countFor(c);
+							cell.dataset.section = sec.id;
 							cell.dataset.aisle = a;
 							cell.dataset.level = lv;
 							if (n > 0) {
 								const t = max > 1 ? (n - 1) / (max - 1) : 0;
 								cell.textContent = n;
 								cell.classList.add('has');
-								cell.style.background = rampAt(t);
-								cell.style.color = t >= 0.45 ? 'var(--ink-dark)' : 'var(--ink-light)';
+								cell.style.background = rampAt(ramp, t);
+								cell.style.color = t >= 0.45 ? 'var(--ink-dark)' : GRIDS[grid].ink;
 								cell.tabIndex = 0;
 								cell.setAttribute('aria-label', 'Aisle ' + a + ' level ' + lv + ': ' + n + ' bins');
 							}
@@ -1378,10 +1446,10 @@
 			row('Updated', m.updated ? stamp(m.updated) + ' (' + ago(m.updated) + ')' : '–');
 			if (m.stats) {
 				row('Rows read', fmt(m.stats.rows));
-				row('On the map', fmt(m.stats.shown));
-				row('Case-Flow dropped', fmt(m.stats.caseFlow));
+				row('On the map', m.stats.pallet == null ? fmt(m.stats.shown)
+					: fmt(m.stats.pallet) + ' on Pallets · ' + fmt(m.stats.caseFlow) + ' on Case Flow');
 				const other = m.stats.otherType + m.stats.unmapped + m.stats.duplicate;
-				if (other) row('Other skipped', fmt(m.stats.otherType) + ' other types · ' + fmt(m.stats.unmapped) + ' outside the map · ' + fmt(m.stats.duplicate) + ' duplicates');
+				if (other) row('Skipped', fmt(m.stats.otherType) + ' other types · ' + fmt(m.stats.unmapped) + ' outside the grids · ' + fmt(m.stats.duplicate) + ' duplicates');
 			}
 			if (m.error) row('Error', m.error);
 			box.appendChild(dl);
@@ -1434,12 +1502,13 @@
 	}
 
 	function fillTip(cell) {
-		const c = cellIndex.get(cell.dataset.aisle + '|' + cell.dataset.level);
+		const c = cellIndex.get(cellKey(cell.dataset.section, cell.dataset.aisle, cell.dataset.level));
+		const sec = SECTIONS.find((x) => x.id === cell.dataset.section);
 		tip.replaceChildren();
 		const head = el('div', 't-head');
 		const title = el('div', 't-title');
 		title.appendChild(el('span', null, 'Aisle ' + cell.dataset.aisle + ' · Level ' + cell.dataset.level));
-		title.appendChild(el('span', 'x', VIEW_NAMES[view]));
+		title.appendChild(el('span', 'x', sec.name + ' · ' + VIEW_NAMES[view]));
 		head.appendChild(title);
 		const v = c.verification.length, s = c.stow.length;
 		const parts = [];
@@ -1542,23 +1611,22 @@
 
 	/* ------------------------------------------------------------ view toggle */
 
-	$('viewSeg').addEventListener('click', (e) => {
-		const b = e.target.closest('button[data-view]');
-		if (!b || b.dataset.view === view) return;
-		view = b.dataset.view;
-		store.set('ph:view', view);
-		render();
-	});
-	$('viewSeg').addEventListener('keydown', (e) => {
-		const order = Object.keys(VIEW_NAMES);
-		const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-		if (!step) return;
-		e.preventDefault();
-		view = order[(order.indexOf(view) + step + order.length) % order.length];
-		store.set('ph:view', view);
-		render();
-		document.querySelector('#viewSeg button[data-view="' + view + '"]').focus();
-	});
+	/** A segmented radio group: click a button, or use the arrow keys. */
+	function bindSeg(id, attr, values, get, set) {
+		$(id).addEventListener('click', (e) => {
+			const b = e.target.closest('button[data-' + attr + ']');
+			if (b && b.dataset[attr] !== get()) set(b.dataset[attr]);
+		});
+		$(id).addEventListener('keydown', (e) => {
+			const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+			if (!step) return;
+			e.preventDefault();
+			set(values[(values.indexOf(get()) + step + values.length) % values.length]);
+			$(id).querySelector('button[data-' + attr + '="' + get() + '"]').focus();
+		});
+	}
+	bindSeg('viewSeg', 'view', Object.keys(VIEW_NAMES), () => view, (v) => { view = v; store.set('ph:view', v); render(); });
+	bindSeg('gridSeg', 'grid', Object.keys(GRIDS), () => grid, (g) => { grid = g; store.set('ph:grid', g); render(); });
 
 	/* ------------------------------------------------------------------ start */
 
