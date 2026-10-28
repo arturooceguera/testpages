@@ -312,10 +312,7 @@
 		margin-bottom: 12px; padding: 14px 16px; border-radius: 12px;
 		background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13px;
 	}
-	.connect h3 { font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-	.connect p { margin-bottom: 6px; }
-	.connect code { overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; }
-	.connect.quiet { background: var(--surface-2); border-color: var(--border); }
+	.connect h3 { font-size: 14px; margin-bottom: 6px; }
 	.connect ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; }
 	.connect .sub { margin-top: 8px; }
 	.connect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -462,21 +459,9 @@
 				<button type="button" class="btn" id="sampleBtn"><svg class="i"><use href="#i-flask"/></svg>Preview with sample data</button>
 			</div>
 		</div>
-		<div class="connect" id="extBox">
+		<div class="connect">
 			<div>
-				<h3>Hands-free updates (browser extension) <span class="pill" id="extPill">Not installed</span></h3>
-				<p id="extText">With the Pallet Heatmap Auto-Update extension installed, Refresh and the automatic refresh download the exports in the background with your sign-in. Nothing to click on the export site. Set it up once:</p>
-				<ol id="extSteps">
-					<li>Download the <code>pallet-heatmap-extension</code> folder from this page's repository.</li>
-					<li>In its <code>manifest.json</code>, replace <code>https://paste-export-site-domain-here/*</code> with <code id="extExport"></code> and <code>https://paste-heatmap-site-domain-here/*</code> with <code id="extHeatmap"></code>.</li>
-					<li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the folder. Firefox: follow the steps in the folder's README.</li>
-					<li>Reload this page. The badge above turns to Connected.</li>
-				</ol>
-			</div>
-		</div>
-		<div class="connect quiet" id="bookmarkBox">
-			<div>
-				<h3>No install: update with a bookmark</h3>
+				<h3>Update from the export site (SSO sign-in)</h3>
 				<ol>
 					<li>Drag the <b>Update Pallet Heatmap</b> button to your bookmarks bar. You only do this once.</li>
 					<li>Open the export site and sign in.</li>
@@ -523,7 +508,6 @@
 	const SETTINGS = {
 		refreshMinutes: 10,    // re-download both links this often (0 = only when you press Refresh)
 		maxBinsInTooltip: 60,  // longest bin list shown when hovering a square
-		signInPage: '',        // page the extension opens when your sign-in has expired ('' = the export site's home page)
 
 		/*
 		 * Column headers in the export. The first header that matches (ignoring case,
@@ -1136,101 +1120,6 @@
 		toast(loaded ? 'Heatmap updated from the export site' : 'The export site did not send any data', loaded ? '' : 'error');
 	});
 
-	/* ------------------------------------------------- auto-update extension */
-
-	/*
-	 * The Pallet Heatmap Auto-Update extension (pallet-heatmap-extension folder) downloads the
-	 * exports with your signed-in session, so Refresh works with no clicks on the export site.
-	 */
-	const EXT = 'pallet-heatmap-extension';
-	let extension = null;     // { version } once the extension has said hello
-	let extPending = null;    // { id, quiet } while it is downloading
-
-	function extensionRefresh(opts) {
-		opts = opts || {};
-		if (!extension) return false;
-		if (extPending) return true;
-		if (!SOURCES.some((s) => linkSet(s.link))) {
-			if (!opts.quiet) toast('Add the export links in DATA_LINKS first', 'error');
-			return true;
-		}
-		extPending = { id: Date.now() + '-' + Math.random(), quiet: !!opts.quiet };
-		$('refreshBtn').classList.add('spinning');
-		window.postMessage({
-			type: 'pallet-heatmap:ext-refresh',
-			id: extPending.id,
-			interactive: !opts.quiet,   // only bring a sign-in tab to the front when you pressed Refresh
-			signInPage: SETTINGS.signInPage,
-			links: { verification: DATA_LINKS.verification.trim(), stow: DATA_LINKS.readyToStow.trim() }
-		}, '*');
-		return true;
-	}
-
-	function base64ToBuffer(b64) {
-		const bin = atob(b64);
-		const bytes = new Uint8Array(bin.length);
-		for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-		return bytes.buffer;
-	}
-
-	window.addEventListener('message', async (e) => {
-		const d = e.data;
-		if (e.source !== window || !d || d.from !== EXT) return;
-
-		if (d.type === 'pallet-heatmap:ext-hello') {
-			const first = !extension;
-			extension = { version: d.version };
-			setupExtensionBox();
-			if (first) { render(); extensionRefresh({ quiet: true }); }
-			return;
-		}
-		if (!extPending || d.id !== extPending.id) return;
-		if (d.type === 'pallet-heatmap:ext-status') {
-			if (!extPending.quiet) toast(d.text, 'info');
-			return;
-		}
-		if (d.type !== 'pallet-heatmap:ext-data') return;
-
-		const quiet = extPending.quiet;
-		extPending = null;
-		$('refreshBtn').classList.remove('spinning');
-		let loaded = 0;
-		const failed = [];
-		for (const s of SOURCES) {
-			const file = d.files && d.files[s.id];
-			const err = (d.errors && (d.errors[s.id] || d.errors.all)) || '';
-			try {
-				if (file) { await ingest(s, base64ToBuffer(file), 'extension'); loaded++; }
-				else if (err) throw new Error(s.name + ': ' + err);
-			} catch (ex) {
-				failed.push(s.name);
-				meta[s.id] = Object.assign({}, meta[s.id], { error: ex.message });
-			}
-		}
-		saveCache();
-		render();
-		if (failed.length) toast('Could not update ' + failed.join(' and '), 'error');
-		else if (!quiet && loaded) toast('Heatmap updated');
-	});
-	window.postMessage({ type: 'pallet-heatmap:ext-ping' }, '*');
-
-	function setupExtensionBox() {
-		const pill = $('extPill');
-		pill.textContent = extension ? 'Connected' : 'Not installed';
-		pill.className = 'pill' + (extension ? ' ok' : '');
-		$('extSteps').hidden = !!extension;
-		$('bookmarkBox').hidden = !!extension;
-		$('extText').textContent = extension
-			? 'Refresh, and the automatic refresh every ' + SETTINGS.refreshMinutes + ' minutes, download the exports in the background with your sign-in. ' +
-				'If your sign-in has expired, the export site opens in a background tab to sign you in and closes again. When it needs you to type something, that tab comes to the front after you press Refresh.'
-			: 'With the Pallet Heatmap Auto-Update extension installed, Refresh and the automatic refresh download the exports in the background with your sign-in. Nothing to click on the export site. Set it up once:';
-		const link = SOURCES.map((s) => s.link).find(linkSet);
-		$('extExport').textContent = link ? new URL(link.trim()).origin + '/*' : 'your export site, e.g. https://export.example.com/*';
-		$('extHeatmap').textContent = /^https?:$/.test(location.protocol)
-			? location.origin + '/*'
-			: "this page's web address (opened as a file, it already works once you turn on Allow access to file URLs for the extension)";
-	}
-
 	/** Made-up bins (including Case-Flow rows that must be dropped) for previewing the layout. */
 	function loadSample() {
 		let seed = 7;
@@ -1366,7 +1255,7 @@
 		else if (missing.length) {
 			lines = ['Add the ' + missing.map((s) => s.name).join(' and ') + ' export link' + (missing.length > 1 ? 's' : '') +
 				' in DATA_LINKS at the top of the page script, or drop the downloaded files on this page.'];
-		} else if (directBlocked && !realData && !extension) {
+		} else if (directBlocked && !realData) {
 			lines = ['The export site needs your SSO sign-in, so this page cannot download the files by itself. ' +
 				'Use the Update Pallet Heatmap bookmark under Data sources, or sign in, download both exports and drop them on this page.'];
 		}
@@ -1475,7 +1364,7 @@
 			const m = meta[s.id];
 			const box = el('div', 'src');
 			const h = el('h3', null, s.name);
-			const ORIGINS = { link: 'From link', extension: 'From extension', bookmark: 'From bookmark', file: 'From file', sample: 'Sample' };
+			const ORIGINS = { link: 'From link', bookmark: 'From bookmark', file: 'From file', sample: 'Sample' };
 			const pill = el('span', 'pill' + (m.error ? ' bad' : m.updated ? ' ok' : ''),
 				m.error ? 'Failed' : m.updated ? ORIGINS[m.origin] || 'Loaded' : 'Not loaded');
 			h.appendChild(pill);
@@ -1673,19 +1562,14 @@
 
 	/* ------------------------------------------------------------------ start */
 
-	// Best way first: the extension, then the export tab the bookmark ran in, then the links directly.
-	$('refreshBtn').addEventListener('click', () => { if (!extensionRefresh() && !askExportTab()) refreshFromLinks(); });
+	$('refreshBtn').addEventListener('click', () => { if (!askExportTab()) refreshFromLinks(); });
 	setInterval(renderUpdated, 30000);
 	if (SETTINGS.refreshMinutes > 0) {
 		// Behind SSO the bookmark does the refreshing; only poll the links if they download directly.
-		setInterval(() => {
-			if (extension) extensionRefresh({ quiet: true });
-			else if (!directBlocked) refreshFromLinks({ quiet: true });
-		}, SETTINGS.refreshMinutes * 60000);
+		setInterval(() => { if (!directBlocked) refreshFromLinks({ quiet: true }); }, SETTINGS.refreshMinutes * 60000);
 	}
 
 	setupBookmark();
-	setupExtensionBox();
 	loadCache();
 	render();
 	refreshFromLinks({ quiet: true });
