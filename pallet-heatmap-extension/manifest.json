@@ -3,11 +3,19 @@
 	"name": "Pallet Heatmap Auto-Update",
 	"version": "1.0.0",
 	"description": "Downloads the Verification and Ready to Stow exports with your signed-in session and sends them to the Pallet Heatmap.",
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "pallet-heatmap-auto-update@testpages",
+			"strict_min_version": "128.0",
+			"data_collection_permissions": { "required": ["none"] }
+		}
+	},
 	"host_permissions": [
 		"https://paste-export-site-domain-here/*"
 	],
 	"background": {
-		"service_worker": "background.js"
+		"service_worker": "background.js",
+		"scripts": ["background.js"]
 	},
 	"content_scripts": [
 		{

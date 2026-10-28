@@ -66,7 +66,7 @@ async function refresh(msg, port) {
 	const retry = [];
 	for (const [key, url] of links) {
 		if (!(await allowed(url))) {
-			errors[key] = 'the extension is not allowed to open ' + originOf(url) + '. Put that address in host_permissions in manifest.json, then reload the extension.';
+			errors[key] = 'the extension is not allowed to open ' + originOf(url) + '. Put that address in host_permissions in manifest.json and reload the extension. In Firefox, also allow it under about:addons > Pallet Heatmap Auto-Update > Permissions.';
 			continue;
 		}
 		const r = await download(url);

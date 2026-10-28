@@ -21,6 +21,7 @@
 			if (m.type === 'status') reply({ type: 'pallet-heatmap:ext-status', id: d.id, text: m.text });
 			if (m.type === 'done') {
 				finished = true;
+				clearInterval(keepAlive);
 				reply({ type: 'pallet-heatmap:ext-data', id: d.id, files: m.files, errors: m.errors });
 				port.disconnect();
 			}
@@ -29,6 +30,9 @@
 			if (!finished) reply({ type: 'pallet-heatmap:ext-data', id: d.id, files: {}, errors: { all: 'The extension stopped before the download finished. Press Refresh to try again.' } });
 		});
 		port.postMessage({ type: 'refresh', links: d.links, interactive: !!d.interactive, signInPage: d.signInPage || '' });
+		// Keeps the background awake while waiting for a sign-in (Firefox stops idle backgrounds after 30 s).
+		const keepAlive = setInterval(() => { try { port.postMessage({ type: 'ping' }); } catch (e) { clearInterval(keepAlive); } }, 15000);
+		port.onDisconnect.addListener(() => clearInterval(keepAlive));
 	});
 
 	hello();
