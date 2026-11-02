@@ -402,7 +402,7 @@
 			</div>
 		</div>
 		<div class="top-actions">
-			<button type="button" class="icon-btn" id="refreshBtn" aria-label="Refresh data" title="Refresh data">
+			<button type="button" class="icon-btn" id="refreshBtn" aria-label="Open the Verification website and refresh" title="Open the Verification website and refresh">
 				<svg class="i"><use href="#i-refresh"/></svg>
 			</button>
 			<button type="button" class="icon-btn" id="themeToggle" aria-label="Switch to dark mode" title="Switch theme">
@@ -524,10 +524,14 @@
 	 * Paste the "Export to Excel" (CSV download) link for each list between the quotes.
 	 *   verification -> fills pendingVerificationBins (empty bins pending verification)
 	 *   readyToStow  -> fills pendingStowBins         (empty bins pending stow)
+	 *
+	 * verificationSite is the Verification website the Refresh button takes you to, so you
+	 * can sign in and click the Update Pallet Heatmap bookmark there.
 	 */
 	const DATA_LINKS = {
 		verification: 'PASTE_VERIFICATION_EXPORT_LINK_HERE',
-		readyToStow:  'PASTE_READY_TO_STOW_EXPORT_LINK_HERE'
+		readyToStow:  'PASTE_READY_TO_STOW_EXPORT_LINK_HERE',
+		verificationSite: 'PASTE_VERIFICATION_EXPORT_LINK_HERE'
 	};
 
 	const SETTINGS = {
@@ -935,9 +939,11 @@
 		if (opts.quiet) return;
 		if (blocked) {
 			const usedBookmark = SOURCES.some((s) => meta[s.id].origin === 'bookmark');
-			toast(usedBookmark
-				? 'To refresh, click the Update Pallet Heatmap bookmark on the export site. After that, this button refreshes through it'
-				: 'The export site needs your sign-in. Use the Update Pallet Heatmap bookmark, or drop the downloaded files here', 'info');
+			toast(opts.openedSite
+				? 'The Verification website is open in another tab. Click the Update Pallet Heatmap bookmark there to load fresh data'
+				: usedBookmark
+					? 'To refresh, click the Update Pallet Heatmap bookmark on the export site. After that, this button refreshes through it'
+					: 'The export site needs your sign-in. Use the Update Pallet Heatmap bookmark, or drop the downloaded files here', 'info');
 		}
 		else if (failed) toast(failed === ready.length ? 'Could not refresh the data' : 'Some data could not be refreshed', 'error');
 		else toast('Heatmap updated');
@@ -1630,7 +1636,29 @@
 
 	/* ------------------------------------------------------------------ start */
 
-	$('refreshBtn').addEventListener('click', () => { if (!askExportTab()) refreshFromLinks(); });
+	/*
+	 * Takes you to the Verification website: opens it in a tab, or brings that tab to the
+	 * front if it is already open (without reloading it, so a bookmark running there keeps going).
+	 */
+	function openVerificationSite() {
+		const site = String(DATA_LINKS.verificationSite || '').trim();
+		if (!linkSet(site)) {
+			toast('Add your Verification website link to DATA_LINKS.verificationSite', 'error');
+			return false;
+		}
+		const w = window.open('', 'verification-site');
+		if (!w) { toast('Allow pop-ups for this page so Refresh can open the Verification website', 'error'); return false; }
+		try {
+			if (w.location.href === 'about:blank') w.location.href = site;   // a new tab
+		} catch (e) { /* already on the website (another address): it is just brought to the front */ }
+		w.focus();
+		return true;
+	}
+
+	$('refreshBtn').addEventListener('click', () => {
+		const openedSite = openVerificationSite();
+		if (!askExportTab()) refreshFromLinks({ openedSite });
+	});
 	setInterval(renderUpdated, 30000);
 	if (SETTINGS.refreshMinutes > 0) {
 		// Behind SSO the bookmark does the refreshing; only poll the links if they download directly.
