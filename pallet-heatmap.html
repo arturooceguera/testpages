@@ -525,8 +525,10 @@
 	 *   verification -> fills pendingVerificationBins (empty bins pending verification)
 	 *   readyToStow  -> fills pendingStowBins         (empty bins pending stow)
 	 *
-	 * verificationSite is the Verification website the Refresh button takes you to, so you
-	 * can sign in and click the Update Pallet Heatmap bookmark there.
+	 * verificationSite is the Verification website Refresh opens when the heatmap has no
+	 * signed-in website tab to get data from, so you can sign in and click the Update Pallet
+	 * Heatmap bookmark there. Use the page's address, not the Export to Excel link (an export
+	 * link would download a file, so Refresh opens that site's home page instead).
 	 */
 	const DATA_LINKS = {
 		verification: 'PASTE_VERIFICATION_EXPORT_LINK_HERE',
@@ -1641,11 +1643,13 @@
 	 * front if it is already open (without reloading it, so a bookmark running there keeps going).
 	 */
 	function openVerificationSite() {
-		const site = String(DATA_LINKS.verificationSite || '').trim();
+		let site = String(DATA_LINKS.verificationSite || '').trim();
 		if (!linkSet(site)) {
 			toast('Add your Verification website link to DATA_LINKS.verificationSite', 'error');
 			return false;
 		}
+		// An export link would download a file. The bookmark works on any page of the site.
+		if (SOURCES.some((s) => String(s.link || '').trim() === site)) site = new URL(site).origin + '/';
 		const w = window.open('', 'verification-site');
 		if (!w) { toast('Allow pop-ups for this page so Refresh can open the Verification website', 'error'); return false; }
 		try {
@@ -1655,9 +1659,12 @@
 		return true;
 	}
 
+	// Refresh through the signed-in website tab when there is one. Only open the website
+	// when nothing else can get the data (the export site needs a sign-in this page cannot do).
 	$('refreshBtn').addEventListener('click', () => {
-		const openedSite = openVerificationSite();
-		if (!askExportTab()) refreshFromLinks({ openedSite });
+		if (askExportTab()) return;
+		const openedSite = directBlocked && openVerificationSite();
+		refreshFromLinks({ openedSite });
 	});
 	setInterval(renderUpdated, 30000);
 	if (SETTINGS.refreshMinutes > 0) {
